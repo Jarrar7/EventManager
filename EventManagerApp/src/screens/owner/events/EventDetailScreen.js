@@ -123,6 +123,33 @@ export default function EventDetailScreen({ route, navigation }) {
     loadAll();
   }
 
+  async function markAllPaid() {
+    const unpaid = assignments.filter(a => !a.is_paid);
+    Alert.alert(
+      'סימון תשלום קבוצתי',
+      `לסמן את כל העובדים באירוע זה כשלום? (${unpaid.length} עובדים)`,
+      [
+        { text: t.cancel, style: 'cancel' },
+        {
+          text: 'אישור',
+          onPress: async () => {
+            const now = new Date().toISOString();
+            const { error } = await supabase
+              .from('event_workers')
+              .update({ is_paid: true, paid_at: now })
+              .eq('event_id', eventId)
+              .eq('is_paid', false);
+            if (error) { Alert.alert(t.error, error.message); return; }
+            setAssignments(prev =>
+              prev.map(a => a.is_paid ? a : { ...a, is_paid: true, paid_at: now })
+            );
+            showToast('כל העובדים סומנו כשלום ✓');
+          },
+        },
+      ]
+    );
+  }
+
   async function duplicateEvent() {
     Alert.alert(
       'שכפול אירוע',
@@ -277,6 +304,16 @@ export default function EventDetailScreen({ route, navigation }) {
             </View>
           </View>
         ))
+      )}
+
+      {assignments.filter(a => !a.is_paid).length >= 2 && (
+        <TouchableOpacity
+          style={styles.bulkPayBtn}
+          onPress={markAllPaid}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.bulkPayBtnText}>סמן את כולם כשלום ✓</Text>
+        </TouchableOpacity>
       )}
 
       {unassignedWorkers.length > 0 && (
@@ -460,6 +497,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   removeBtnText: { fontSize: 14, color: '#e74c3c', fontWeight: '700' },
+
+  bulkPayBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bulkPayBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   addWorkerToggle: {
     backgroundColor: '#5B6EF5',

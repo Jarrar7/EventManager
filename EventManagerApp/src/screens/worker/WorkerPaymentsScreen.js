@@ -6,6 +6,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import OfflineBanner from '../../components/OfflineBanner';
 import { t } from '../../i18n/he';
 
 const rtl = I18nManager.isRTL;
@@ -50,6 +51,7 @@ export default function WorkerPaymentsScreen() {
 
   return (
     <ScreenWrapper>
+      <OfflineBanner />
       <FlatList
         data={rows}
         keyExtractor={item => item.id}

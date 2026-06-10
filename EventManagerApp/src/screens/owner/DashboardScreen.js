@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import OfflineBanner from '../../components/OfflineBanner';
 import { t } from '../../i18n/he';
 
 const rtl = I18nManager.isRTL;
@@ -140,6 +141,7 @@ export default function DashboardScreen() {
 
   return (
     <ScreenWrapper>
+      <OfflineBanner />
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
         {/* Header */}

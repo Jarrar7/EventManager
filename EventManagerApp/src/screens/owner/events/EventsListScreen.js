@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
+  View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, ActivityIndicator, I18nManager,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
+import OfflineBanner from '../../../components/OfflineBanner';
 import { t } from '../../../i18n/he';
 
 const rtl = I18nManager.isRTL;
@@ -27,9 +29,13 @@ export default function EventsListScreen({ navigation }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
 
   useFocusEffect(
-    useCallback(() => { fetchEvents(); }, [])
+    useCallback(() => {
+      fetchEvents();
+      return () => setSearch('');
+    }, [])
   );
 
   async function fetchEvents() {
@@ -42,7 +48,15 @@ export default function EventsListScreen({ navigation }) {
     setLoading(false);
   }
 
-  const filtered = filter === 'all' ? events : events.filter(e => e.status === filter);
+  const q = search.trim().toLowerCase();
+
+  const filtered = events.filter(e => {
+    const matchesFilter = filter === 'all' || e.status === filter;
+    const matchesSearch = !q ||
+      e.title?.toLowerCase().includes(q) ||
+      e.venue?.toLowerCase().includes(q);
+    return matchesFilter && matchesSearch;
+  });
 
   // Today's events always float to the top; original order preserved otherwise
   const sorted = [...filtered].sort((a, b) => {
@@ -63,6 +77,8 @@ export default function EventsListScreen({ navigation }) {
 
   return (
     <ScreenWrapper>
+      <OfflineBanner />
+
       <View style={styles.headerRow}>
         <Text style={styles.title}>{t.events}</Text>
         <TouchableOpacity
@@ -88,11 +104,34 @@ export default function EventsListScreen({ navigation }) {
         ))}
       </View>
 
+      <View style={styles.searchRow}>
+        <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="חפש אירוע..."
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          textAlign={rtl ? 'right' : 'left'}
+        />
+      </View>
+
       {sorted.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📅</Text>
-          <Text style={styles.emptyText}>{t.noEventsYet}</Text>
-          <Text style={styles.emptySubtext}>{t.tapToCreateEvent}</Text>
+          {events.length === 0 ? (
+            <>
+              <Text style={styles.emptyIcon}>📅</Text>
+              <Text style={styles.emptyText}>{t.noEventsYet}</Text>
+              <Text style={styles.emptySubtext}>{t.tapToCreateEvent}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyIcon}>🔍</Text>
+              <Text style={styles.emptyText}>לא נמצאו אירועים</Text>
+            </>
+          )}
         </View>
       ) : (
         <FlatList
@@ -160,7 +199,7 @@ const styles = StyleSheet.create({
   filters: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
   },
   filterBtn: {
@@ -173,6 +212,24 @@ const styles = StyleSheet.create({
   filterBtnActive: { backgroundColor: '#5B6EF5' },
   filterText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
   filterTextActive: { color: '#fff' },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    height: 44,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  searchIcon: { marginEnd: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: '#1a1a2e' },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyIcon: { fontSize: 56, marginBottom: 12 },

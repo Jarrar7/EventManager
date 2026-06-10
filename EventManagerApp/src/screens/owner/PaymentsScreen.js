@@ -6,6 +6,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../lib/supabase';
 import ScreenWrapper from '../../components/ScreenWrapper';
+import OfflineBanner from '../../components/OfflineBanner';
 import { t } from '../../i18n/he';
 
 const rtl = I18nManager.isRTL;
@@ -94,6 +95,7 @@ export default function PaymentsScreen() {
   if (sections.length === 0) {
     return (
       <ScreenWrapper>
+        <OfflineBanner />
         <Text style={styles.pageTitle}>{t.paymentsTitle}</Text>
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>💰</Text>
@@ -110,6 +112,7 @@ export default function PaymentsScreen() {
 
   return (
     <ScreenWrapper>
+      <OfflineBanner />
       <SectionList
         sections={sections}
         keyExtractor={item => item.id}

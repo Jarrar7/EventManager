@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity,
+  View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, ActivityIndicator, Alert, I18nManager, Linking,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
+import OfflineBanner from '../../../components/OfflineBanner';
 import { t } from '../../../i18n/he';
 
 const rtl = I18nManager.isRTL;
@@ -14,10 +15,12 @@ const rtl = I18nManager.isRTL;
 export default function StaffListScreen({ navigation }) {
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useFocusEffect(
     useCallback(() => {
       fetchWorkers();
+      return () => setSearch('');
     }, [])
   );
 
@@ -51,6 +54,15 @@ export default function StaffListScreen({ navigation }) {
     );
   }
 
+  const q = search.trim().toLowerCase();
+  const qDigits = q.replace(/\D/g, '');
+  const filtered = q
+    ? workers.filter(w =>
+        w.name?.toLowerCase().includes(q) ||
+        (qDigits && w.phone?.replace(/\D/g, '').includes(qDigits))
+      )
+    : workers;
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -61,6 +73,8 @@ export default function StaffListScreen({ navigation }) {
 
   return (
     <ScreenWrapper>
+      <OfflineBanner />
+
       <View style={styles.headerRow}>
         <Text style={styles.title}>{t.staff}</Text>
         <TouchableOpacity
@@ -72,15 +86,38 @@ export default function StaffListScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {workers.length === 0 ? (
+      <View style={styles.searchRow}>
+        <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="חפש עובד..."
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          textAlign={rtl ? 'right' : 'left'}
+        />
+      </View>
+
+      {filtered.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>👥</Text>
-          <Text style={styles.emptyText}>{t.noWorkersYet}</Text>
-          <Text style={styles.emptySubtext}>{t.tapToAddWorker}</Text>
+          {workers.length === 0 ? (
+            <>
+              <Text style={styles.emptyIcon}>👥</Text>
+              <Text style={styles.emptyText}>{t.noWorkersYet}</Text>
+              <Text style={styles.emptySubtext}>{t.tapToAddWorker}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyIcon}>🔍</Text>
+              <Text style={styles.emptyText}>לא נמצאו עובדים</Text>
+            </>
+          )}
         </View>
       ) : (
         <FlatList
-          data={workers}
+          data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
@@ -131,7 +168,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     marginTop: 8,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   title: { fontSize: 26, fontWeight: '700', color: '#1a1a2e' },
   addBtn: {
@@ -141,6 +178,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    height: 44,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  searchIcon: { marginEnd: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: '#1a1a2e' },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyIcon: { fontSize: 56, marginBottom: 12 },
