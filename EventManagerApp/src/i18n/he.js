@@ -1,0 +1,147 @@
+export const t = {
+  // App
+  appName: 'מנהל אירועים',
+
+  // Auth
+  signIn: 'כניסה',
+  signOut: 'התנתק',
+  email: 'אימייל',
+  password: 'סיסמה',
+  signInToAccount: 'התחבר לחשבון שלך',
+  missingFields: 'שדות חסרים',
+  enterEmailPassword: 'אנא הזן אימייל וסיסמה.',
+  loginFailed: 'כניסה נכשלה',
+
+  // Common
+  cancel: 'ביטול',
+  remove: 'הסרה',
+  error: 'שגיאה',
+  comingSoon: 'בקרוב.',
+  noPhone: 'אין טלפון',
+
+  // Owner tabs
+  dashboard: 'לוח בקרה',
+  events: 'אירועים',
+  staff: 'צוות',
+  payments: 'תשלומים',
+  settings: 'הגדרות',
+
+  // Worker tabs
+  myShifts: 'המשמרות שלי',
+  myPayments: 'התשלומים שלי',
+  myProfile: 'הפרופיל שלי',
+  profile: 'פרופיל',
+
+  // Staff
+  addWorker: 'הוסף עובד',
+  editWorker: 'ערוך עובד',
+  noWorkersYet: 'אין עובדים עדיין.',
+  tapToAddWorker: 'לחץ "הוסף עובד" להתחיל.',
+  removeWorker: 'הסר עובד',
+  removeWorkerConfirm: (name) => `להסיר את ${name} מהצוות? הפעולה תמחק גם את חשבון הכניסה שלהם.`,
+  fullName: 'שם מלא *',
+  phone: 'טלפון',
+  emailRequired: 'אימייל *',
+  passwordRequired: 'סיסמה *',
+  nameEmailPasswordRequired: 'שם, אימייל וסיסמה נדרשים.',
+  passwordMinLength: 'הסיסמה חייבת לכלול לפחות 6 תווים.',
+  addedSuccessfully: (name) => `${name} נוסף בהצלחה!`,
+  saveChanges: 'שמור שינויים',
+  missingName: 'שם חסר',
+  workerNameEmpty: 'שם העובד לא יכול להיות ריק.',
+  savedOk: 'נשמר ✅',
+  workerUpdated: 'פרטי העובד עודכנו.',
+
+  // Events
+  newEvent: 'אירוע חדש',
+  editEvent: 'ערוך אירוע',
+  addNew: '+ חדש',
+  filterAll: 'הכל',
+  filterUpcoming: 'קרוב',
+  filterDone: 'הסתיים',
+  noEventsYet: 'אין אירועים עדיין.',
+  tapToCreateEvent: 'לחץ "+ חדש" ליצירת האירוע הראשון.',
+  eventTitleLabel: 'שם האירוע *',
+  eventDateLabel: 'תאריך *',
+  venueLabel: 'מקום',
+  timeLabel: 'שעה',
+  notesLabel: 'הערות',
+  createEvent: 'צור אירוע',
+  titleRequired: 'שם האירוע נדרש.',
+  dateRequired: 'תאריך נדרש.',
+  dateFormatError: 'התאריך חייב להיות בפורמט DD/MM/YYYY.',
+  back: 'חזרה',
+  statusUpcoming: 'סמן כהסתיים ✓',
+  statusDone: '✅ הסתיים — לחץ לפתיחה מחדש',
+  workersCount: (n) => `עובדים (${n})`,
+  noWorkersAssigned: 'אין עובדים משובצים עדיין.',
+  paid: '✅ שולם',
+  unpaid: '🔴 לא שולם',
+  hideWorkerList: '▲ הסתר רשימת עובדים',
+  assignWorker: '+ שבץ עובד',
+  assign: 'שבץ',
+  deleteEvent: '🗑️ מחק אירוע',
+  deleteEventConfirm: (title) => `למחוק את "${title}"? לא ניתן לבטל פעולה זו.`,
+  removeFromEvent: 'הסר מאירוע',
+  removeFromEventConfirm: (name) => `להסיר את ${name} מהאירוע?`,
+
+  confirmDate: 'אישור תאריך',
+
+  // Payments
+  paymentsTitle: 'תשלומים',
+  totalOwed: 'סה"כ לתשלום',
+  totalPaid: 'שולם',
+  totalUnpaid: 'טרם שולם',
+  markPaid: 'סמן כשולם',
+  markUnpaid: 'בטל תשלום',
+  noPayments: 'אין תשלומים עדיין.',
+  noPaymentsSubtext: 'שבץ עובדים לאירועים כדי לעקוב אחר התשלומים.',
+  shekel: '₪',
+  confirmMarkPaid: (name, event) => `לסמן את תשלום ${name} עבור "${event}" כשולם?`,
+  confirmMarkUnpaid: (name, event) => `לבטל את סימון התשלום של ${name} עבור "${event}"?`,
+  markAsPaid: 'סמן כשולם',
+  markAsUnpaid: 'בטל שולם',
+
+  // Worker — My Shifts
+  myShiftsTitle: 'המשמרות שלי',
+  noShifts: 'אין משמרות קרובות.',
+  noShiftsSubtext: 'כאשר ישובצו לך אירועים הם יופיעו כאן.',
+  upcomingShift: 'קרוב',
+  shiftVenue: 'מקום',
+
+  // Worker — My Payments
+  myPaymentsTitle: 'התשלומים שלי',
+  noWorkerPayments: 'אין תשלומים עדיין.',
+  noWorkerPaymentsSubtext: 'תשלומים יופיעו כאן לאחר שיבוץ לאירועים.',
+  workerTotalEarned: 'סה"כ שכר',
+  workerTotalPaid: 'שולם',
+  workerTotalPending: 'ממתין לתשלום',
+
+  // Worker — Profile
+  workerProfileTitle: 'הפרופיל שלי',
+  workerRole: 'עובד',
+
+  // Dashboard
+  dashGreetingMorning: 'בוקר טוב',
+  dashGreetingAfternoon: 'צהריים טובים',
+  dashGreetingEvening: 'ערב טוב',
+  dashUpcomingEvents: 'אירועים קרובים',
+  dashUnpaidWorkers: 'תשלומים פתוחים',
+  dashUnpaidTotal: 'סה"כ חוב',
+  dashToday: 'אירועי היום',
+  dashThisWeek: 'השבוע הקרוב',
+  dashNoEventsToday: 'אין אירועים היום.',
+  dashNoEventsWeek: 'אין אירועים נוספים השבוע.',
+
+  // Placeholders
+  phEmail: 'you@example.com',
+  phName: 'לדוגמה: שרה כהן',
+  phPhone: 'לדוגמה: 050-1234567',
+  phWorkerEmail: 'worker@example.com',
+  phPassword: 'מינ. 6 תווים',
+  phEventTitle: 'לדוגמה: חתונה בתל אביב',
+  phDate: 'לדוגמה: 25/12/2025',
+  phVenue: 'לדוגמה: אולם גרנד, חיפה',
+  phTime: 'לדוגמה: 20:00',
+  phNotes: 'פרטים נוספים...',
+};
