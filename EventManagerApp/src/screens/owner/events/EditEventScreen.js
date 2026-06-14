@@ -5,6 +5,7 @@ import {
   I18nManager,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import Toast, { useToast } from '../../../components/Toast';
@@ -21,13 +22,32 @@ function parseSupabaseDate(dateStr) {
   return new Date(dateStr.length === 10 ? dateStr + 'T00:00:00' : dateStr);
 }
 
+function parseTimeString(timeStr) {
+  const d = new Date();
+  if (timeStr && /^\d{1,2}:\d{2}$/.test(timeStr)) {
+    const [h, m] = timeStr.split(':').map(Number);
+    d.setHours(h, m, 0, 0);
+  } else {
+    d.setHours(20, 0, 0, 0);
+  }
+  return d;
+}
+
+function formatTimeDisplay(date) {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
 export default function EditEventScreen({ route, navigation }) {
   const { event } = route.params;
+  const queryClient = useQueryClient();
 
   const [title, setTitle]               = useState(event.title ?? '');
   const [selectedDate, setSelectedDate] = useState(parseSupabaseDate(event.date));
   const [showPicker, setShowPicker]     = useState(false);
-  const [time, setTime]                 = useState(event.time ?? '');
+  const [selectedTime, setSelectedTime] = useState(parseTimeString(event.time));
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [venue, setVenue]               = useState(event.venue ?? '');
   const [notes, setNotes]               = useState(event.notes ?? '');
   const [loading, setLoading]           = useState(false);
@@ -37,6 +57,11 @@ export default function EditEventScreen({ route, navigation }) {
   function onDateChange(e, date) {
     if (Platform.OS === 'android') setShowPicker(false);
     if (date) setSelectedDate(date);
+  }
+
+  function onTimeChange(e, date) {
+    if (Platform.OS === 'android') setShowTimePicker(false);
+    if (date) setSelectedTime(date);
   }
 
   async function handleSave() {
@@ -49,7 +74,7 @@ export default function EditEventScreen({ route, navigation }) {
       .update({
         title:  title.trim(),
         date:   selectedDate.toISOString(),
-        time:   time.trim() || null,
+        time:   formatTimeDisplay(selectedTime),
         venue:  venue.trim() || null,
         notes:  notes.trim() || null,
       })
@@ -57,6 +82,9 @@ export default function EditEventScreen({ route, navigation }) {
     setLoading(false);
 
     if (error) { setErrorMsg(error.message); return; }
+    queryClient.invalidateQueries({ queryKey: ['events'] });
+    queryClient.invalidateQueries({ queryKey: ['event-detail', event.id] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     showToast('האירוע עודכן בהצלחה ✓');
     setTimeout(() => navigation.navigate('EventDetail', { eventId: event.id }), 800);
   }
@@ -112,16 +140,27 @@ export default function EditEventScreen({ route, navigation }) {
         )}
 
         <Text style={styles.label}>{t.timeLabel}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={t.phTime}
-          placeholderTextColor="#9CA3AF"
-          value={time}
-          onChangeText={setTime}
-          keyboardType="numbers-and-punctuation"
-          textAlign="left"
-          maxLength={5}
-        />
+        <TouchableOpacity style={styles.dateButton} onPress={() => setShowTimePicker(true)} activeOpacity={0.8}>
+          <Text style={styles.dateButtonText}>🕐 {formatTimeDisplay(selectedTime)}</Text>
+        </TouchableOpacity>
+
+        {showTimePicker && (
+          <View style={Platform.OS === 'ios' ? styles.iosPickerWrapper : null}>
+            <DateTimePicker
+              value={selectedTime}
+              mode="time"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={onTimeChange}
+              locale="he-IL"
+              style={Platform.OS === 'ios' ? styles.iosPicker : undefined}
+            />
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowTimePicker(false)}>
+                <Text style={styles.pickerDoneText}>{t.confirmDate}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         <Text style={styles.label}>{t.venueLabel}</Text>
         <TextInput

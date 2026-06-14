@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import {
   View, Text, SectionList, TouchableOpacity,
   StyleSheet, ActivityIndicator, Alert, I18nManager,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import OfflineBanner from '../../components/OfflineBanner';
@@ -18,61 +18,61 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-export default function PaymentsScreen() {
-  const [sections, setSections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(null);
+async function fetchPayments() {
+  const { data, error } = await supabase
+    .from('event_workers')
+    .select('id, pay_amount, is_paid, paid_at, event_id, worker_id, users(id, name), events(id, title, date)')
+    .order('is_paid', { ascending: true })
+    .order('event_id');
+  if (error) throw error;
 
-  useFocusEffect(
-    useCallback(() => { loadPayments(); }, [])
+  const byWorker = {};
+  for (const row of data) {
+    const wid = row.worker_id;
+    if (!byWorker[wid]) {
+      byWorker[wid] = { worker: row.users, totalOwed: 0, totalPaid: 0, data: [] };
+    }
+    byWorker[wid].totalOwed += row.pay_amount || 0;
+    if (row.is_paid) byWorker[wid].totalPaid += row.pay_amount || 0;
+    byWorker[wid].data.push(row);
+  }
+
+  return Object.values(byWorker).sort(
+    (a, b) => (b.totalOwed - b.totalPaid) - (a.totalOwed - a.totalPaid)
   );
+}
 
-  async function loadPayments() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('event_workers')
-      .select('id, pay_amount, is_paid, paid_at, event_id, worker_id, users(id, name), events(id, title, date)')
-      .order('is_paid', { ascending: true })
-      .order('event_id');
+export default function PaymentsScreen() {
+  const queryClient = useQueryClient();
 
-    if (error) {
-      Alert.alert(t.error, error.message);
-      setLoading(false);
-      return;
-    }
+  const { data: sections = [], isLoading, isFetching } = useQuery({
+    queryKey: ['payments'],
+    queryFn: fetchPayments,
+  });
 
-    const byWorker = {};
-    for (const row of data) {
-      const wid = row.worker_id;
-      if (!byWorker[wid]) {
-        byWorker[wid] = { worker: row.users, totalOwed: 0, totalPaid: 0, data: [] };
-      }
-      byWorker[wid].totalOwed += row.pay_amount || 0;
-      if (row.is_paid) byWorker[wid].totalPaid += row.pay_amount || 0;
-      byWorker[wid].data.push(row);
-    }
+  const toggleMutation = useMutation({
+    mutationFn: async ({ assignmentId, newPaid }) => {
+      const { error } = await supabase
+        .from('event_workers')
+        .update({
+          is_paid: newPaid,
+          paid_at: newPaid ? new Date().toISOString() : null,
+        })
+        .eq('id', assignmentId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['worker-payments'] });
+      // Invalidate all cached event detail screens since payment status changed
+      queryClient.invalidateQueries({ queryKey: ['event-detail'] });
+    },
+    onError: (error) => Alert.alert(t.error, error.message),
+  });
 
-    const result = Object.values(byWorker).sort(
-      (a, b) => (b.totalOwed - b.totalPaid) - (a.totalOwed - a.totalPaid)
-    );
-    setSections(result);
-    setLoading(false);
-  }
-
-  async function togglePaid(assignment) {
-    setToggling(assignment.id);
-    const newPaid = !assignment.is_paid;
-    const { error } = await supabase
-      .from('event_workers')
-      .update({
-        is_paid: newPaid,
-        paid_at: newPaid ? new Date().toISOString() : null,
-      })
-      .eq('id', assignment.id);
-    setToggling(null);
-    if (error) { Alert.alert(t.error, error.message); return; }
-    loadPayments();
-  }
+  // Which assignment row is currently being toggled
+  const togglingId = toggleMutation.isLoading ? toggleMutation.variables?.assignmentId : null;
 
   function confirmToggle(assignment) {
     const workerName = assignment.users?.name;
@@ -84,11 +84,17 @@ export default function PaymentsScreen() {
 
     Alert.alert(action, message, [
       { text: t.cancel, style: 'cancel' },
-      { text: action, onPress: () => togglePaid(assignment) },
+      {
+        text: action,
+        onPress: () => toggleMutation.mutate({
+          assignmentId: assignment.id,
+          newPaid: !assignment.is_paid,
+        }),
+      },
     ]);
   }
 
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#5B6EF5" /></View>;
   }
 
@@ -120,7 +126,10 @@ export default function PaymentsScreen() {
         stickySectionHeadersEnabled={false}
         ListHeaderComponent={
           <>
-            <Text style={styles.pageTitle}>{t.paymentsTitle}</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.pageTitle}>{t.paymentsTitle}</Text>
+              {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+            </View>
 
             <View style={styles.summaryCard}>
               <View style={styles.summaryItem}>
@@ -174,10 +183,10 @@ export default function PaymentsScreen() {
               <TouchableOpacity
                 style={[styles.toggleBtn, item.is_paid ? styles.toggleBtnPaid : styles.toggleBtnUnpaid]}
                 onPress={() => confirmToggle(item)}
-                disabled={toggling === item.id}
+                disabled={togglingId === item.id}
                 activeOpacity={0.8}
               >
-                {toggling === item.id
+                {togglingId === item.id
                   ? <ActivityIndicator size="small" color={item.is_paid ? '#6B7280' : '#fff'} />
                   : <Text style={[styles.toggleBtnText, item.is_paid && styles.toggleBtnTextPaid]}>
                       {item.is_paid ? t.markAsUnpaid : t.markAsPaid}
@@ -195,9 +204,15 @@ export default function PaymentsScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 16,
+  },
   pageTitle: {
     fontSize: 26, fontWeight: '700', color: '#1a1a2e',
-    paddingHorizontal: 20, marginTop: 16, marginBottom: 16,
     textAlign: rtl ? 'right' : 'left',
   },
 

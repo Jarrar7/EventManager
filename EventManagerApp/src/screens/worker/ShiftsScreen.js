@@ -1,8 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator, I18nManager,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -44,41 +44,34 @@ function DaysChip({ dateStr }) {
 
 export default function ShiftsScreen() {
   const { profile } = useAuth();
-  const [shifts, setShifts] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  // profile?.id in deps so the callback re-creates (and re-fires) when auth loads
-  useFocusEffect(
-    useCallback(() => { loadShifts(); }, [profile?.id])
-  );
+  const { data: shifts = [], isLoading, isFetching } = useQuery({
+    queryKey: ['shifts', profile?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('event_workers')
+        .select('*, events(*)')
+        .eq('worker_id', profile.id);
+      if (error) throw error;
+      return (data || [])
+        .filter(r => r.events?.status === 'upcoming')
+        .sort((a, b) => parseDate(a.events.date) - parseDate(b.events.date));
+    },
+    // Only runs once profile is loaded; profile?.id in key ensures re-query if profile changes
+    enabled: !!profile?.id,
+  });
 
-  async function loadShifts() {
-    if (!profile?.id) { setLoading(false); return; }
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from('event_workers')
-      .select('*, events(*)')
-      .eq('worker_id', profile.id);
-
-    if (error) { setLoading(false); return; }
-
-    const sorted = (data || [])
-      .filter(r => r.events?.status === 'upcoming')
-      .sort((a, b) => parseDate(a.events.date) - parseDate(b.events.date));
-
-    setShifts(sorted);
-    setLoading(false);
-  }
-
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#27ae60" /></View>;
   }
 
   return (
     <ScreenWrapper>
       <OfflineBanner />
-      <Text style={styles.pageTitle}>{t.myShiftsTitle}</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.pageTitle}>{t.myShiftsTitle}</Text>
+        {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+      </View>
 
       {shifts.length === 0 ? (
         <View style={styles.empty}>
@@ -122,9 +115,15 @@ export default function ShiftsScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 16,
+  },
   pageTitle: {
     fontSize: 26, fontWeight: '700', color: '#1a1a2e',
-    paddingHorizontal: 20, marginTop: 16, marginBottom: 16,
     textAlign: rtl ? 'right' : 'left',
   },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },

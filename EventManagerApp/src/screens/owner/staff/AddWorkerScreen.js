@@ -4,6 +4,7 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform,
   ActivityIndicator, ScrollView, I18nManager,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import Toast, { useToast } from '../../../components/Toast';
@@ -17,6 +18,7 @@ function isValidPhone(phone) {
 }
 
 export default function AddWorkerScreen({ navigation }) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -77,6 +79,7 @@ export default function AddWorkerScreen({ navigation }) {
       });
 
       setLoading(false);
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
       showToast('העובד נוסף בהצלחה ✓');
       setTimeout(() => navigation.navigate('StaffList'), 800);
 

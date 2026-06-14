@@ -1,5 +1,5 @@
 # EventManager App — Progress Report
-**Last updated:** 2026-06-10 (rev 5)
+**Last updated:** 2026-06-13 (rev 6)
 **Project root:** `C:\Projects\EventManager\`
 **App folder:** `C:\Projects\EventManager\EventManagerApp\`
 
@@ -18,16 +18,22 @@
 - `src/screens/auth/LoginScreen.js` — Email + password login. Inline error via `Alert`. Loading spinner on button. `KeyboardAvoidingView` for iOS.
   - **UI polish**: Blue circle with "מא" initials. Card at `paddingTop: SCREEN_HEIGHT * 0.18`.
   - **iOS Save Password fix**: `textContentType="oneTimeCode"` + `autoComplete="off"` on password; `textContentType="username"` + `autoComplete="off"` on email.
-- `App.js` — `SafeAreaProvider` → `AuthProvider` → `NavigationContainer` → `RootScreen`. Routes to `LoginScreen` / `OwnerTabs` / `WorkerTabs` based on session and `profile.role`.
+  - **Forgot password flow**: "שכחתי סיסמה?" link at bottom of login card. Tapping switches card to email-input mode. Calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: 'eventmanager://reset-password' })`. Shows success/error Alert in Hebrew. "חזרה להתחברות" link returns to login form. No new screen needed.
+- `src/screens/auth/ResetPasswordScreen.js` — New screen shown when the app opens via a password-reset deep link (`eventmanager://reset-password#access_token=...`). Two `TextInput` fields (new password + confirm), validates length ≥ 6 and match, calls `supabase.auth.updateUser({ password })`, then signs the user out and returns to LoginScreen.
+  - **⚠ EAS only**: Deep link requires a production EAS build. Expo Go does not register custom URL schemes (`eventmanager://`) with the OS. Test with: `eas build --platform ios --profile preview`
+- `App.js` — `SafeAreaProvider` → `QueryClientProvider` → `AuthProvider` → `NavigationContainer` → `RootScreen`. Routes to `LoginScreen` / `OwnerTabs` / `WorkerTabs` based on session and `profile.role`. Also handles deep-link password reset:
+  - `parseHashParams(url)` extracts `access_token`, `refresh_token`, `type` from URL hash.
+  - `Linking.getInitialURL()` + `Linking.addEventListener` cover cold and warm starts.
+  - When `type === 'recovery'`, calls `supabase.auth.setSession(...)` then sets `passwordResetPending = true`, which shows `ResetPasswordScreen` above all other navigation.
 
 ### Phase 3 — Staff Module ✅
 - `src/screens/owner/staff/StaffListScreen.js` — Lists all workers ordered by name. Avatar (initial, `#5B6EF5` circle), name, phone. **Real-time search bar** (below header) with `search-outline` Ionicons icon — filters by name and phone simultaneously; phone comparison strips non-digits. "לא נמצאו עובדים" empty state when search yields nothing. Search clears on screen blur via `useFocusEffect` cleanup. **Tap-to-call**: green `call-outline` Ionicons button (36×36, `#ECFDF5` bg) next to each worker — opens `tel:` via `Linking.openURL`. Delete button is a `32×32` `#FEE2E2` red circle with `✕`. `OfflineBanner` shown at top.
-- `src/screens/owner/staff/AddWorkerScreen.js` — Form: name (RTL), phone, email, password. Creates auth account via `supabase.auth.signUp` with session save/restore flow. **Per-field inline validation**: name/email/password show "שדה חובה"; phone shows "מספר טלפון לא תקין" if not 9–10 digits. **Success toast** "העובד נוסף בהצלחה ✓" before navigating to StaffList.
+- `src/screens/owner/staff/AddWorkerScreen.js` — Form: name (RTL), phone, email, password. Creates auth account via `supabase.auth.signUp` with session save/restore flow. **Per-field inline validation**: name/email/password show "שדה חובה"; phone shows "מספר טלפון לא תקין" if not 9–10 digits. **Success toast** "העובד נוסף בהצלחה ✓" before navigating to StaffList. Calls `queryClient.invalidateQueries({ queryKey: ['staff'] })` after save.
 - `src/screens/owner/staff/EditWorkerScreen.js` — Pre-filled name + phone form with same per-field validation. **Worker history at top of screen**:
   - **Stats card**: 4 columns — total events assigned (count), total earned (black `#1a1a2e`), total paid (green `#10B981`), total owed (red `#EF4444`). Same summary card style as PaymentsScreen.
   - **"היסטוריית אירועים"**: last 5 events the worker was assigned to, sorted by event date descending. Each row shows event title, date, pay amount, and paid/unpaid badge. Section hidden if worker has no history.
   - History loaded via `useEffect` on mount with a `event_workers` query (selects `worker_id, pay_amount, is_paid, events(id, title, date)`). `worker_id` must be in the select list or RLS silently returns no rows.
-  - **Success toast** "הפרטים עודכנו בהצלחה ✓" before navigating back.
+  - **Success toast** "הפרטים עודכנו בהצלחה ✓" before navigating back. Calls `queryClient.invalidateQueries({ queryKey: ['staff'] })` after save.
 - `src/navigation/StaffStack.js` — Native stack: `StaffList` → `AddWorker` / `EditWorker`.
 - Worker deletion calls Supabase RPC `delete_worker_account(user_id)`.
 
@@ -47,14 +53,14 @@
 
 ### Phase 4 — Events Module ✅
 - `src/screens/owner/events/EventsListScreen.js` — Lists all events ordered by date descending. Filter tabs: הכל / קרוב / הסתיים. **Real-time search bar** (below filter tabs) with `search-outline` Ionicons icon — filters by title and venue within the active filter tab. "לא נמצאו אירועים" empty state when search yields nothing. Search clears on screen blur. **"היום" badge**: events today show an orange `#F59E0B` "היום! 🎉" badge plus `borderWidth: 1.5, borderColor: '#F59E0B'` card border; always sort to top regardless of active filter (stable sort). `OfflineBanner` shown at top.
-- `src/screens/owner/events/AddEventScreen.js` — Fields: title (RTL), date (calendar picker), **time (native time picker, default 20:00, saves as HH:MM)**, venue, notes. **Back arrow** in top row (Ionicons `arrow-forward-outline` in RTL). **Per-field validation**: title shows "שדה חובה" if empty. **Success toast** "האירוע נוצר בהצלחה ✓" before navigating to EventsList.
-- `src/screens/owner/events/EditEventScreen.js` — Pre-filled edit form. Date picker. Time field is still free text (⚠ see Known Issues). **Success toast** "האירוע עודכן בהצלחה ✓" before navigating to EventDetail.
+- `src/screens/owner/events/AddEventScreen.js` — Fields: title (RTL), date (calendar picker), **time (native time picker, default 20:00, saves as HH:MM)**, venue, notes. **Back arrow** in top row (Ionicons `arrow-forward-outline` in RTL). **Per-field validation**: title shows "שדה חובה" if empty. **Success toast** "האירוע נוצר בהצלחה ✓" before navigating to EventsList. Calls `invalidateQueries(['events'])` + `invalidateQueries(['dashboard'])` after save.
+- `src/screens/owner/events/EditEventScreen.js` — Pre-filled edit form. Date picker. **Time field is native `DateTimePicker mode="time"`** (initialised from existing `event.time` via `parseTimeString()`, saves as HH:MM — upgraded from free text in this session). **Success toast** "האירוע עודכן בהצלחה ✓" before navigating to EventDetail. Calls `invalidateQueries(['events'])` + `invalidateQueries(['event-detail', event.id])` + `invalidateQueries(['dashboard'])` after save.
 - `src/screens/owner/events/EventDetailScreen.js` — Full event management:
   - Top row: back button + **"⎘ שכפל"** duplicate button + "✏️ ערוך אירוע" edit button.
   - Title, Hebrew date + time, venue, notes.
   - **Status toggle**: `upcoming` = white card + grey border; `done` = solid `#10B981` green + white text.
   - **Worker rows**: pay amount editable via `TextInput` + `onEndEditing`. **Pay validation**: 0 or negative silently reverts (`payKeys` remount trick). Remove button = `32×32` `#FEE2E2` circle with `✕`.
-  - **Per-worker payment toggle**: green "סמן כשלום ✓" when unpaid; grey "שולם ✓" label when paid. Confirmation alert → updates `is_paid = true, paid_at = now` → updates local state instantly. **Success toast** "סומן כשלום ✓".
+  - **Per-worker payment toggle**: green "סמן כשלום ✓" when unpaid; grey "שולם ✓" label when paid. Confirmation alert → updates `is_paid = true, paid_at = now` → invalidates React Query caches immediately. **Success toast** "סומן כשלום ✓".
   - **Bulk payment button**: when 2+ workers are unpaid, a green "סמן את כולם כשלום ✓" button appears below the workers list. Tapping shows confirmation alert "לסמן את כל העובדים באירוע זה כשלום? ([X] עובדים)". On confirm, single Supabase `update` for all unpaid rows (`event_id = eventId AND is_paid = false`), local state updated immediately, button auto-hides once all paid. **Success toast** "כל העובדים סומנו כשלום ✓".
   - **Duplicate event**: confirmation alert → inserts new event with today's date + same title/venue/time/notes/status=upcoming → **success toast** "האירוע שוכפל בהצלחה ✓" → `navigation.replace` to new EventDetail.
   - "+ שבץ עובד" expandable section with unassigned workers.
@@ -67,10 +73,12 @@
   - Section header: `#5B6EF5` avatar, name, unpaid chip (red), paid chip (green).
   - Each row: event title, date, pay amount, toggle button.
   - Toggle: "סמן כשולם" = `#10B981` green; "בטל שולם" = `#F3F4F6` grey. Confirmation Alert before toggling.
+  - Toggle uses `useMutation` — `togglingId` derived from `toggleMutation.isLoading ? toggleMutation.variables?.assignmentId : null`, no separate `toggling` state.
+  - On success: invalidates `['payments']`, `['dashboard']`, `['worker-payments']`, `['event-detail']`.
   - `OfflineBanner` shown at top.
 
 ### Phase 6 — Worker View ✅
-- `src/screens/worker/ShiftsScreen.js` — Upcoming shifts. Query `.select('*, events(*)')` filtered by `worker_id = profile.id`. Client-side filter `status === 'upcoming'`, sorted ascending by date. Days-until chip: red "היום!" / orange "מחר" / orange "בעוד N ימים" (≤7) / blue (>7). `profile?.id` in `useFocusEffect` deps to prevent stale closure. `OfflineBanner` shown at top.
+- `src/screens/worker/ShiftsScreen.js` — Upcoming shifts. Query `.select('*, events(*)')` filtered by `worker_id = profile.id`. Client-side filter `status === 'upcoming'`, sorted ascending by date. Days-until chip: red "היום!" / orange "מחר" / orange "בעוד N ימים" (≤7) / blue (>7). `OfflineBanner` shown at top.
 - `src/screens/worker/WorkerPaymentsScreen.js` — Full payment history. Summary card (total earned / paid / pending). Colored stripe per card (green = paid, red = unpaid). `OfflineBanner` shown at top.
 - `src/screens/worker/ProfileScreen.js` — Large `#27ae60` avatar, name, role badge. Info card: email from `session?.user?.email`, phone from `profile?.phone`. Sign out button.
 - `src/navigation/WorkerTabs.js` — 3 tabs: MyShifts (`list-outline`), MyPayments (`wallet-outline`), Profile (`person-outline`). Active tint `#27ae60`.
@@ -81,6 +89,7 @@
   - **Stats row**: 3 cards with coloured top border — upcoming events (blue), unpaid workers count (orange), unpaid total ₪ (red).
   - **"אירועי היום"** and **"השבוע הקרוב"** sections with tappable event rows.
   - `OfflineBanner` shown at top.
+  - `useFocusEffect` + `invalidateQueries(['dashboard'])` ensures stats refresh on every screen focus while React Query cache shows data instantly.
 
 ### Phase 8 — Owner Settings Screen ✅
 - Built inline in `src/navigation/OwnerTabs.js` as `SettingsScreen` component:
@@ -117,9 +126,52 @@ Full visual redesign applied to all screens.
 - **"היום" badge** — orange border + badge on today's events in EventsList; always sorted to top.
 - **Tap to call** — `call-outline` button in StaffList opens native dialer.
 - **Back button on AddEvent** — RTL-aware Ionicons arrow in top row.
-- **Time picker in AddEvent** — native iOS spinner + Android modal. Default 20:00. Saves HH:MM.
+- **Native time picker in AddEvent and EditEvent** — iOS spinner + Android modal. Default 20:00 (AddEvent) or parsed from existing `event.time` (EditEvent). Saves HH:MM.
 - **Input validation** — per-field inline errors across AddWorker, EditWorker, AddEvent. Phone: 9–10 digits. Required fields: "שדה חובה". Pay amount reverts silently if 0 or negative.
 - **Success toast** after every save action across all forms.
+- **Forgot password flow** — inline in LoginScreen, Hebrew UI, deep link via `eventmanager://reset-password`.
+- **ResetPasswordScreen** — shown on deep link open, validates and updates password via Supabase, returns user to login.
+
+### Phase 11 — React Query / Performance ✅
+
+Installed `@tanstack/react-query@4` (v4.44.0). All data screens now use React Query for caching, eliminating loading spinners on every navigation return.
+
+**Configuration in `App.js`:**
+```js
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 2,   // data stays fresh 2 minutes
+      cacheTime: 1000 * 60 * 10,  // unused cache kept 10 minutes
+      retry: 1,
+    },
+  },
+});
+```
+
+**Screens converted to `useQuery`:**
+
+| Screen | Query Key | Notes |
+|---|---|---|
+| `DashboardScreen` | `['dashboard', profile?.id]` | Also keeps `useFocusEffect + invalidateQueries` for live stats |
+| `EventsListScreen` | `['events']` | `useFocusEffect` retained only for search-clear on blur |
+| `StaffListScreen` | `['staff']` | Delete via `useMutation` |
+| `PaymentsScreen` | `['payments']` | Toggle via `useMutation`; replaced `toggling` useState with `toggleMutation.variables` |
+| `ShiftsScreen` | `['shifts', profile?.id]` | `enabled: !!profile?.id` |
+| `WorkerPaymentsScreen` | `['worker-payments', profile?.id]` | `enabled: !!profile?.id` |
+| `EventDetailScreen` | `['event-detail', eventId]` | `payInputs` + `payKeys` remain local state |
+
+**Mutation invalidation map:**
+- Add/Edit event → `['events']`, `['dashboard']` (+ `['event-detail', id]` on edit)
+- Add/Edit worker → `['staff']`
+- Delete worker → `['staff']`, `['payments']`, `['dashboard']`
+- Toggle payment (PaymentsScreen) → `['payments']`, `['dashboard']`, `['worker-payments']`, `['event-detail']`
+- All EventDetail mutations (pay toggle, bulk pay, status toggle, remove worker, add worker, pay amount edit) → `['event-detail', eventId]` + relevant cross-screen keys
+
+**Loading behavior:**
+- `isLoading` (no cache yet) → full-screen `ActivityIndicator`
+- `isFetching` (cache available, background refresh) → small top-of-screen indicator
+- Cached data shows immediately on return navigation
 
 ---
 
@@ -127,7 +179,7 @@ Full visual redesign applied to all screens.
 
 ```
 EventManagerApp/
-├── App.js                                        ← Entry point, RTL bootstrap, role routing
+├── App.js                                        ← Entry, RTL bootstrap, QueryClientProvider, deep-link handler, role routing
 ├── src/
 │   ├── i18n/
 │   │   └── he.js                                 ← All Hebrew strings
@@ -148,7 +200,8 @@ EventManagerApp/
 │   │   └── EventsStack.js                        ← EventsList → AddEvent / EditEvent / EventDetail
 │   └── screens/
 │       ├── auth/
-│       │   └── LoginScreen.js
+│       │   ├── LoginScreen.js                    ← Login + inline forgot-password card
+│       │   └── ResetPasswordScreen.js            ← Deep-link password reset (EAS build only)
 │       ├── owner/
 │       │   ├── DashboardScreen.js
 │       │   ├── PaymentsScreen.js
@@ -166,10 +219,6 @@ EventManagerApp/
 │           ├── WorkerPaymentsScreen.js
 │           └── ProfileScreen.js
 ```
-
-**Dead files** (not imported anywhere — safe to delete):
-- `src/screens/owner/OwnerHome.js`
-- `src/screens/worker/WorkerHome.js`
 
 ---
 
@@ -190,6 +239,7 @@ EventManagerApp/
 | @react-native-community/datetimepicker | SDK 54 | Native date + time pickers |
 | @react-native-community/netinfo | SDK 54 | Offline detection for OfflineBanner |
 | @expo/vector-icons (Ionicons) | bundled with Expo | Tab icons, back arrows, call button, search icon, wifi icon |
+| **@tanstack/react-query** | **4.44.0** | **Data caching — instant navigation, background refresh** |
 
 ---
 
@@ -287,6 +337,23 @@ Because `supabase.auth.signUp()` replaces the current session:
 - Navigation params for `EventDetailScreen` **must** use `{ eventId: string }`.
 - `navigation.replace('EventDetail', { eventId })` used for duplicate — prevents back-navigation to original event.
 
+### React Query Architecture
+- `QueryClient` lives at module level in `App.js`, wrapped in `QueryClientProvider` above `AuthProvider`.
+- `staleTime: 2min` — cached data shows instantly on navigation return; no re-fetch within the window.
+- `cacheTime: 10min` — cached data survives background for 10 min after screen unmount.
+- `isLoading` (no cache at all) → full spinner. `isFetching` (cache hit, background refresh) → small indicator.
+- `useFocusEffect + invalidateQueries` retained only in `DashboardScreen` so live stats always refresh on tab focus.
+- Mutation invalidation is comprehensive: every mutation invalidates all related query keys to keep cross-screen data in sync.
+
+### Forgot Password / Deep Link Reset
+1. User taps "שכחתי סיסמה?" in LoginScreen → enters email → `resetPasswordForEmail(email, { redirectTo: 'eventmanager://reset-password' })`.
+2. Supabase sends email with link → user taps → OS opens app via `eventmanager://` scheme.
+3. `App.js` `Linking` listener catches URL → `parseHashParams` extracts `access_token`, `refresh_token`, `type=recovery` from hash fragment.
+4. `supabase.auth.setSession(...)` establishes recovery session → `passwordResetPending = true` → `ResetPasswordScreen` shown.
+5. User enters new password → `supabase.auth.updateUser({ password })` → sign out → back to `LoginScreen`.
+6. **Supabase URL config required**: add `eventmanager://reset-password` to **Authentication → URL Configuration → Redirect URLs**.
+7. **EAS build required**: custom schemes not registered in Expo Go. Build with `eas build --platform ios --profile preview`.
+
 ### Toast Pattern
 `useToast()` returns `showToast(msg)`, `toastMessage`, `toastOpacity`. Screens render `<Toast message={toastMessage} opacity={toastOpacity} />` as a sibling of `KeyboardAvoidingView` inside `ScreenWrapper`. `position: 'absolute'` + `pointerEvents="none"` overlays without blocking interaction. Pattern: `showToast(msg); setTimeout(() => navigation.navigate(...), 800)`.
 
@@ -336,8 +403,12 @@ All `formatDate`/`parseDate` functions:
 | Stay logged in after app restart | ✅ |
 | Role-based routing (owner vs worker) | ✅ |
 | Sign out | ✅ |
+| Forgot password — inline email form in Hebrew | ✅ |
+| Password reset deep link (EAS build only — not testable in Expo Go) | ✅ |
 | Full Hebrew UI / RTL layout | ✅ |
 | iOS Save Password popup suppressed | ✅ |
+| React Query caching — instant data on navigation return | ✅ |
+| Background refresh indicator (`isFetching`) | ✅ |
 | View staff list with search (name + phone) | ✅ |
 | Tap-to-call worker from StaffList | ✅ |
 | Add worker (creates auth + profile, session restored) | ✅ |
@@ -353,6 +424,7 @@ All `formatDate`/`parseDate` functions:
 | Create new event (title, date, time picker, venue, notes) | ✅ |
 | Back button on AddEvent screen (RTL-aware arrow) | ✅ |
 | Edit existing event | ✅ |
+| Native time picker in EditEvent (upgraded from free text) | ✅ |
 | View event detail with full content | ✅ |
 | Assign worker to event with pay amount | ✅ |
 | Edit pay amount inline (reverts silently if 0 or negative) | ✅ |
@@ -366,6 +438,7 @@ All `formatDate`/`parseDate` functions:
 | Native time picker in AddEvent (iOS spinner + Android modal) | ✅ |
 | Owner bottom tabs with Ionicons (5 tabs) | ✅ |
 | Owner Dashboard with stats + today/this-week events | ✅ |
+| Dashboard refreshes live stats on every tab focus | ✅ |
 | Open event from Dashboard | ✅ |
 | Owner payments overview (SectionList by worker) | ✅ |
 | Mark / unmark worker payment as paid (PaymentsScreen) | ✅ |
@@ -419,6 +492,10 @@ All `formatDate`/`parseDate` functions:
 | 33 | `@react-native-community/netinfo` missing — OfflineBanner crashed on load | Ran `npx expo install @react-native-community/netinfo` |
 | 34 | Worker history in EditWorkerScreen showed all zeros | Query used `.order('created_at')` but `event_workers` has no `created_at` column — Supabase returned error silently; removed the order clause, sort by event date in JS instead |
 | 35 | Worker history query returned 0 rows despite worker having assignments | `worker_id` not in select list — RLS silently blocked rows; added `worker_id` to `.select()` |
+| 36 | **EditEventScreen time field was still free text** — AddEvent was upgraded but EditEvent was not | Replaced with native `DateTimePicker mode="time"`, `parseTimeString()` initialises from `event.time`, `formatTimeDisplay()` saves as HH:MM |
+| 37 | **WorkerPaymentsScreen stale closure** — `useFocusEffect` deps were `[]`, captured `profile = null` (same pattern as Bug #14) | Replaced entirely with React Query `useQuery`; `enabled: !!profile?.id` handles null profile cleanly |
+| 38 | **Dead files in repo** — `OwnerHome.js` and `WorkerHome.js` not imported anywhere | Deleted both files |
+| 39 | **Password reset link opened `localhost:3000`** — `resetPasswordForEmail` had no `redirectTo` | Added `{ redirectTo: 'eventmanager://reset-password' }` + `"scheme": "eventmanager"` in `app.json` + deep-link handler in `App.js` + `ResetPasswordScreen.js` |
 
 ---
 
@@ -426,23 +503,20 @@ All `formatDate`/`parseDate` functions:
 
 | # | Issue | Severity | File |
 |---|---|---|---|
-| 1 | **EditEventScreen time field is still free text** — AddEvent was upgraded to a time picker but EditEvent was not | Medium | `EditEventScreen.js` |
+| 1 | **Password reset deep link not testable in Expo Go** — custom URL scheme `eventmanager://` is not registered by the OS in Expo Go; must build with EAS | Medium | `ResetPasswordScreen.js`, `App.js` |
 | 2 | **Pay amount edit uses `onEndEditing`** — may not fire reliably on Android | Low | `EventDetailScreen.js` |
 | 3 | **Worker creation fragile multi-step flow** — network drop between `signUp` and `setSession` leaves orphaned auth account with no `public.users` row | Low | `AddWorkerScreen.js` |
 | 4 | **No pagination** on events or staff lists | Low | `EventsListScreen.js`, `StaffListScreen.js` |
-| 5 | **Two dead files exist** — not imported, safe to delete | Cosmetic | `OwnerHome.js`, `WorkerHome.js` |
-| 6 | **Dashboard only queries `upcoming` events** — events marked done mid-week disappear from "this week" section | Low | `DashboardScreen.js` |
-| 7 | **`WorkerPaymentsScreen` stale closure risk** — `useFocusEffect` deps are `[]` not `[profile?.id]` | Low | `WorkerPaymentsScreen.js` |
+| 5 | **Dashboard only queries `upcoming` events** — events marked done mid-week disappear from "this week" section | Low | `DashboardScreen.js` |
 
 ---
 
 ## 10. What Is Next
 
 ### Must Do Before Client Handoff
-1. **Fix EditEventScreen time field** — replace free-text `TextInput` with native `DateTimePicker` in `mode="time"` (same implementation as AddEventScreen).
-2. **Delete dead files**: `OwnerHome.js`, `WorkerHome.js`.
-3. **Fix WorkerPaymentsScreen stale closure** — add `profile?.id` to `useFocusEffect` deps.
-4. **Test on real device after clean restart** — verify RTL layout is correct throughout.
+1. **Test on real device after clean restart** — verify RTL layout is correct throughout.
+2. **Supabase URL configuration** — add `eventmanager://reset-password` to Supabase Authentication → URL Configuration → Redirect URLs (required for password reset deep link).
+3. **EAS build** — required to test forgot password / deep link end-to-end. Run `eas build --platform ios --profile preview`.
 
 ### High-Value Additions
 - **Push notifications** — `expo-notifications` + Supabase Edge Function; notify worker on assignment and day-before reminder.
@@ -471,6 +545,7 @@ Dark mode · Export report (PDF/CSV via Edge Function) · App icon + splash scre
 | Supabase SQL Editor | https://supabase.com/dashboard/project/inefvqnklgdtmddoglcf/sql/new |
 | Supabase Auth Users | https://supabase.com/dashboard/project/inefvqnklgdtmddoglcf/auth/users |
 | Supabase Table Editor | https://supabase.com/dashboard/project/inefvqnklgdtmddoglcf/editor |
+| **Supabase Redirect URLs** | **Authentication → URL Configuration → add `eventmanager://reset-password`** |
 | Node version | v24.16.0 |
 | npm version | 11.16.0 |
 | Expo Go on iPhone | v54.0.2 |

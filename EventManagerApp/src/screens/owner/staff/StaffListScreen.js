@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import OfflineBanner from '../../../components/OfflineBanner';
@@ -12,31 +13,46 @@ import { t } from '../../../i18n/he';
 
 const rtl = I18nManager.isRTL;
 
-export default function StaffListScreen({ navigation }) {
-  const [workers, setWorkers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+async function fetchStaff() {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, phone, role')
+    .eq('role', 'worker')
+    .order('name');
+  if (error) throw error;
+  return data || [];
+}
 
+export default function StaffListScreen({ navigation }) {
+  const [search, setSearch] = useState('');
+  const queryClient = useQueryClient();
+
+  const { data: workers = [], isLoading, isFetching } = useQuery({
+    queryKey: ['staff'],
+    queryFn: fetchStaff,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (workerId) => {
+      const { error } = await supabase.rpc('delete_worker_account', { user_id: workerId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staff'] });
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (error) => Alert.alert(t.error, error.message),
+  });
+
+  // Clear search when leaving the screen — no data refetch needed here
   useFocusEffect(
     useCallback(() => {
-      fetchWorkers();
       return () => setSearch('');
     }, [])
   );
 
-  async function fetchWorkers() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('users')
-      .select('id, name, phone, role')
-      .eq('role', 'worker')
-      .order('name');
-    if (error) Alert.alert(t.error, error.message);
-    else setWorkers(data);
-    setLoading(false);
-  }
-
-  async function deleteWorker(id, name) {
+  function deleteWorker(id, name) {
     Alert.alert(
       t.removeWorker,
       t.removeWorkerConfirm(name),
@@ -44,11 +60,7 @@ export default function StaffListScreen({ navigation }) {
         { text: t.cancel, style: 'cancel' },
         {
           text: t.remove, style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.rpc('delete_worker_account', { user_id: id });
-            if (error) Alert.alert(t.error, error.message);
-            else fetchWorkers();
-          },
+          onPress: () => deleteMutation.mutate(id),
         },
       ]
     );
@@ -63,7 +75,7 @@ export default function StaffListScreen({ navigation }) {
       )
     : workers;
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#5B6EF5" />
@@ -76,7 +88,10 @@ export default function StaffListScreen({ navigation }) {
       <OfflineBanner />
 
       <View style={styles.headerRow}>
-        <Text style={styles.title}>{t.staff}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{t.staff}</Text>
+          {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+        </View>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => navigation.navigate('AddWorker')}
@@ -170,6 +185,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 12,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
   title: { fontSize: 26, fontWeight: '700', color: '#1a1a2e' },
   addBtn: {
     backgroundColor: '#5B6EF5',

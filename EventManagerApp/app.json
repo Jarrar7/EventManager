@@ -3,6 +3,7 @@
     "name": "EventManagerApp",
     "slug": "EventManagerApp",
     "version": "1.0.0",
+    "scheme": "eventmanager",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

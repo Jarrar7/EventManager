@@ -1,8 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator, I18nManager,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -20,32 +20,27 @@ function formatDate(dateStr) {
 
 export default function WorkerPaymentsScreen() {
   const { profile } = useAuth();
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => { loadPayments(); }, [])
-  );
-
-  async function loadPayments() {
-    if (!profile?.id) { setLoading(false); return; }
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('event_workers')
-      .select('id, pay_amount, is_paid, paid_at, events(id, title, date, status)')
-      .eq('worker_id', profile.id)
-      .order('is_paid', { ascending: true })
-      .order('event_id');
-
-    if (!error) setRows(data || []);
-    setLoading(false);
-  }
+  const { data: rows = [], isLoading, isFetching } = useQuery({
+    queryKey: ['worker-payments', profile?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('event_workers')
+        .select('id, pay_amount, is_paid, paid_at, events(id, title, date, status)')
+        .eq('worker_id', profile.id)
+        .order('is_paid', { ascending: true })
+        .order('event_id');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!profile?.id,
+  });
 
   const totalEarned  = rows.reduce((s, r) => s + (r.pay_amount || 0), 0);
   const totalPaid    = rows.filter(r => r.is_paid).reduce((s, r) => s + (r.pay_amount || 0), 0);
   const totalPending = totalEarned - totalPaid;
 
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#27ae60" /></View>;
   }
 
@@ -58,7 +53,10 @@ export default function WorkerPaymentsScreen() {
         contentContainerStyle={{ paddingBottom: 32 }}
         ListHeaderComponent={
           <>
-            <Text style={styles.pageTitle}>{t.myPaymentsTitle}</Text>
+            <View style={styles.titleRow}>
+              <Text style={styles.pageTitle}>{t.myPaymentsTitle}</Text>
+              {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+            </View>
 
             {rows.length > 0 && (
               <View style={styles.summaryCard}>
@@ -114,9 +112,15 @@ export default function WorkerPaymentsScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 16,
+  },
   pageTitle: {
     fontSize: 26, fontWeight: '700', color: '#1a1a2e',
-    paddingHorizontal: 20, marginTop: 16, marginBottom: 16,
     textAlign: rtl ? 'right' : 'left',
   },
 

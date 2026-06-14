@@ -1,10 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity, I18nManager,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import ScreenWrapper from '../../components/ScreenWrapper';
@@ -84,41 +85,52 @@ function EventRow({ event, onPress }) {
   );
 }
 
+async function fetchDashboard() {
+  const [eventsRes, unpaidRes] = await Promise.all([
+    supabase
+      .from('events')
+      .select('id, title, date, venue, status')
+      .eq('status', 'upcoming')
+      .order('date', { ascending: true }),
+    supabase
+      .from('event_workers')
+      .select('pay_amount')
+      .eq('is_paid', false),
+  ]);
+  if (eventsRes.error) throw eventsRes.error;
+  const events = eventsRes.data || [];
+  const unpaidRows = unpaidRes.data || [];
+  return {
+    events,
+    unpaidCount: unpaidRows.length,
+    unpaidTotal: unpaidRows.reduce((s, r) => s + (r.pay_amount || 0), 0),
+  };
+}
+
 export default function DashboardScreen() {
   const { profile } = useAuth();
   const navigation = useNavigation();
-  const [loading, setLoading] = useState(true);
-  const [events, setEvents] = useState([]);
-  const [unpaidCount, setUnpaidCount] = useState(0);
-  const [unpaidTotal, setUnpaidTotal] = useState(0);
+  const queryClient = useQueryClient();
 
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['dashboard', profile?.id],
+    queryFn: fetchDashboard,
+    enabled: !!profile?.id,
+  });
+
+  // Dashboard shows live stats — invalidate on every focus so numbers are always current.
+  // Cached data displays instantly; the background refetch updates silently.
   useFocusEffect(
-    useCallback(() => { loadData(); }, [])
+    useCallback(() => {
+      if (profile?.id) {
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      }
+    }, [queryClient, profile?.id])
   );
 
-  async function loadData() {
-    setLoading(true);
-
-    const [eventsRes, unpaidRes] = await Promise.all([
-      supabase
-        .from('events')
-        .select('id, title, date, venue, status')
-        .eq('status', 'upcoming')
-        .order('date', { ascending: true }),
-      supabase
-        .from('event_workers')
-        .select('pay_amount')
-        .eq('is_paid', false),
-    ]);
-
-    setEvents(eventsRes.data || []);
-
-    const unpaidRows = unpaidRes.data || [];
-    setUnpaidCount(unpaidRows.length);
-    setUnpaidTotal(unpaidRows.reduce((s, r) => s + (r.pay_amount || 0), 0));
-
-    setLoading(false);
-  }
+  const events      = data?.events      || [];
+  const unpaidCount = data?.unpaidCount || 0;
+  const unpaidTotal = data?.unpaidTotal || 0;
 
   function openEvent(event) {
     navigation.navigate('Events', {
@@ -127,11 +139,11 @@ export default function DashboardScreen() {
     });
   }
 
-  const todayEvents = events.filter(e => isToday(e.date));
-  const weekEvents  = events.filter(e => isThisWeek(e.date));
+  const todayEvents   = events.filter(e => isToday(e.date));
+  const weekEvents    = events.filter(e => isThisWeek(e.date));
   const upcomingCount = events.length;
 
-  if (loading) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#5B6EF5" />
@@ -146,7 +158,10 @@ export default function DashboardScreen() {
 
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.greeting}>{hebrewGreeting()}, {profile?.name?.split(' ')[0]} 👋</Text>
+          <View style={styles.greetingRow}>
+            <Text style={styles.greeting}>{hebrewGreeting()}, {profile?.name?.split(' ')[0]} 👋</Text>
+            {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+          </View>
           <Text style={styles.todayDate}>{todayHebrewDate()}</Text>
         </View>
 
@@ -212,6 +227,10 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 12,
     alignSelf: 'stretch',
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   greeting: {
     fontSize: 26,

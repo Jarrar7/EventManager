@@ -4,6 +4,7 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform,
   ActivityIndicator, ScrollView, I18nManager,
 } from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import Toast, { useToast } from '../../../components/Toast';
@@ -25,6 +26,7 @@ function formatDate(dateStr) {
 
 export default function EditWorkerScreen({ route, navigation }) {
   const { worker } = route.params;
+  const queryClient = useQueryClient();
   const [name, setName] = useState(worker.name);
   const [phone, setPhone] = useState(worker.phone || '');
   const [loading, setLoading] = useState(false);
@@ -86,6 +88,7 @@ export default function EditWorkerScreen({ route, navigation }) {
       setFieldErrors({ name: error.message });
       return;
     }
+    queryClient.invalidateQueries({ queryKey: ['staff'] });
     showToast('הפרטים עודכנו בהצלחה ✓');
     setTimeout(() => navigation.goBack(), 800);
   }

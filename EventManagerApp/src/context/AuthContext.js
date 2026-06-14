@@ -1,3 +1,7 @@
+// NOTE: The password reset flow (deep link → ResetPasswordScreen) requires a production
+// EAS build. Expo Go does not register custom URL schemes (eventmanager://) with the OS,
+// so the deep link will never open the app during development. Test this feature by
+// building with: eas build --platform ios --profile preview
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 

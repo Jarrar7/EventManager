@@ -1,10 +1,10 @@
-import React, { useCallback, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, Alert, ScrollView,
   I18nManager,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import Toast, { useToast } from '../../../components/Toast';
@@ -19,49 +19,74 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+async function fetchEventDetail(eventId) {
+  const [eventRes, assignRes, workersRes] = await Promise.all([
+    supabase.from('events').select('*').eq('id', eventId).single(),
+    supabase.from('event_workers').select('*, users(id, name, phone)').eq('event_id', eventId),
+    supabase.from('users').select('id, name, phone').eq('role', 'worker').order('name'),
+  ]);
+  if (eventRes.error) throw eventRes.error;
+  return {
+    event:      eventRes.data,
+    assignments: assignRes.data || [],
+    allWorkers:  workersRes.data || [],
+  };
+}
+
 export default function EventDetailScreen({ route, navigation }) {
   const { eventId } = route.params;
-  const [event, setEvent] = useState(null);
-  const [assignments, setAssignments] = useState([]);
-  const [allWorkers, setAllWorkers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const { showToast, toastMessage, toastOpacity } = useToast();
+
+  // Local UI state — not server state
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [payInputs, setPayInputs] = useState({});
   // payKeys forces TextInput remount to revert invalid entries
   const [payKeys, setPayKeys] = useState({});
-  const { showToast, toastMessage, toastOpacity } = useToast();
 
-  useFocusEffect(
-    useCallback(() => { loadAll(); }, [])
-  );
+  const { data, isLoading } = useQuery({
+    queryKey: ['event-detail', eventId],
+    queryFn: () => fetchEventDetail(eventId),
+  });
 
-  async function loadAll() {
-    setLoading(true);
-    const [eventRes, assignRes, workersRes] = await Promise.all([
-      supabase.from('events').select('*').eq('id', eventId).single(),
-      supabase.from('event_workers').select('*, users(id, name, phone)').eq('event_id', eventId),
-      supabase.from('users').select('id, name, phone').eq('role', 'worker').order('name'),
-    ]);
-    if (eventRes.data) setEvent(eventRes.data);
-    if (assignRes.data) setAssignments(assignRes.data);
-    if (workersRes.data) setAllWorkers(workersRes.data);
-    setLoading(false);
+  const event       = data?.event       ?? null;
+  const assignments = data?.assignments ?? [];
+  const allWorkers  = data?.allWorkers  ?? [];
+
+  const assignedIds      = assignments.map(a => a.worker_id);
+  const unassignedWorkers = allWorkers.filter(w => !assignedIds.includes(w.id));
+
+  // Helpers that invalidate related caches after each mutation -----------------
+
+  function invalidateDetail() {
+    queryClient.invalidateQueries({ queryKey: ['event-detail', eventId] });
   }
 
-  const assignedIds = assignments.map(a => a.worker_id);
-  const unassignedWorkers = allWorkers.filter(w => !assignedIds.includes(w.id));
+  function invalidateListsAndDash() {
+    queryClient.invalidateQueries({ queryKey: ['events'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  }
+
+  function invalidatePayments() {
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
+    queryClient.invalidateQueries({ queryKey: ['worker-payments'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  }
+
+  // ---------------------------------------------------------------------------
 
   async function assignWorker(worker) {
     const pay = parseFloat(payInputs[worker.id] || '0') || 0;
     const { error } = await supabase.from('event_workers').insert({
-      event_id: eventId,
+      event_id:  eventId,
       worker_id: worker.id,
       pay_amount: pay,
       is_paid: false,
     });
     if (error) { Alert.alert(t.error, error.message); return; }
     setPayInputs(prev => { const n = { ...prev }; delete n[worker.id]; return n; });
-    loadAll();
+    invalidateDetail();
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
   }
 
   async function removeAssignment(assignmentId, workerName) {
@@ -74,7 +99,8 @@ export default function EventDetailScreen({ route, navigation }) {
           text: t.remove, style: 'destructive',
           onPress: async () => {
             await supabase.from('event_workers').delete().eq('id', assignmentId);
-            loadAll();
+            invalidateDetail();
+            queryClient.invalidateQueries({ queryKey: ['payments'] });
           },
         },
       ]
@@ -84,7 +110,10 @@ export default function EventDetailScreen({ route, navigation }) {
   async function toggleStatus() {
     const newStatus = event.status === 'upcoming' ? 'done' : 'upcoming';
     const { error } = await supabase.from('events').update({ status: newStatus }).eq('id', eventId);
-    if (!error) setEvent(prev => ({ ...prev, status: newStatus }));
+    if (!error) {
+      invalidateDetail();
+      invalidateListsAndDash();
+    }
   }
 
   async function markAsPaid(assignment) {
@@ -102,9 +131,8 @@ export default function EventDetailScreen({ route, navigation }) {
               .update({ is_paid: true, paid_at: now })
               .eq('id', assignment.id);
             if (error) { Alert.alert(t.error, error.message); return; }
-            setAssignments(prev =>
-              prev.map(a => a.id === assignment.id ? { ...a, is_paid: true, paid_at: now } : a)
-            );
+            invalidateDetail();
+            invalidatePayments();
             showToast('סומן כשלום ✓');
           },
         },
@@ -120,7 +148,8 @@ export default function EventDetailScreen({ route, navigation }) {
       return;
     }
     await supabase.from('event_workers').update({ pay_amount: pay }).eq('id', assignmentId);
-    loadAll();
+    invalidateDetail();
+    queryClient.invalidateQueries({ queryKey: ['payments'] });
   }
 
   async function markAllPaid() {
@@ -140,9 +169,8 @@ export default function EventDetailScreen({ route, navigation }) {
               .eq('event_id', eventId)
               .eq('is_paid', false);
             if (error) { Alert.alert(t.error, error.message); return; }
-            setAssignments(prev =>
-              prev.map(a => a.is_paid ? a : { ...a, is_paid: true, paid_at: now })
-            );
+            invalidateDetail();
+            invalidatePayments();
             showToast('כל העובדים סומנו כשלום ✓');
           },
         },
@@ -159,22 +187,23 @@ export default function EventDetailScreen({ route, navigation }) {
         {
           text: 'שכפל',
           onPress: async () => {
-            const { data, error } = await supabase
+            const { data: newEvent, error } = await supabase
               .from('events')
               .insert({
-                title: event.title,
-                date: new Date().toISOString(),
-                time: event.time || null,
-                venue: event.venue || null,
-                notes: event.notes || null,
-                status: 'upcoming',
+                title:      event.title,
+                date:       new Date().toISOString(),
+                time:       event.time   || null,
+                venue:      event.venue  || null,
+                notes:      event.notes  || null,
+                status:     'upcoming',
                 created_by: event.created_by,
               })
               .select()
               .single();
             if (error) { Alert.alert(t.error, error.message); return; }
+            invalidateListsAndDash();
             showToast('האירוע שוכפל בהצלחה ✓');
-            setTimeout(() => navigation.replace('EventDetail', { eventId: data.id }), 800);
+            setTimeout(() => navigation.replace('EventDetail', { eventId: newEvent.id }), 800);
           },
         },
       ]
@@ -191,6 +220,7 @@ export default function EventDetailScreen({ route, navigation }) {
           text: t.remove, style: 'destructive',
           onPress: async () => {
             await supabase.from('events').delete().eq('id', eventId);
+            invalidateListsAndDash();
             navigation.navigate('EventsList');
           },
         },
@@ -198,7 +228,7 @@ export default function EventDetailScreen({ route, navigation }) {
     );
   }
 
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#5B6EF5" /></View>;
   }
 

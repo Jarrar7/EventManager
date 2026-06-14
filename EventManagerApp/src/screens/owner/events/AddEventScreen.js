@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
 import ScreenWrapper from '../../../components/ScreenWrapper';
@@ -32,6 +33,7 @@ function defaultTimeDate() {
 
 export default function AddEventScreen({ navigation }) {
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
   const [title, setTitle] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -74,6 +76,8 @@ export default function AddEventScreen({ navigation }) {
     setLoading(false);
 
     if (error) { setErrorMsg(error.message); return; }
+    queryClient.invalidateQueries({ queryKey: ['events'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     showToast('האירוע נוצר בהצלחה ✓');
     setTimeout(() => navigation.navigate('EventsList'), 800);
   }

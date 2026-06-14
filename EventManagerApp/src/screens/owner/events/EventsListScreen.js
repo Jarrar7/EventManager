@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import OfflineBanner from '../../../components/OfflineBanner';
@@ -25,28 +26,30 @@ function isToday(dateStr) {
   return d.toDateString() === new Date().toDateString();
 }
 
+async function fetchEvents() {
+  const { data, error } = await supabase
+    .from('events')
+    .select('*')
+    .order('date', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
 export default function EventsListScreen({ navigation }) {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
+  const { data: events = [], isLoading, isFetching } = useQuery({
+    queryKey: ['events'],
+    queryFn: fetchEvents,
+  });
+
+  // Clear search when leaving the screen — no data refetch needed here
   useFocusEffect(
     useCallback(() => {
-      fetchEvents();
       return () => setSearch('');
     }, [])
   );
-
-  async function fetchEvents() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .order('date', { ascending: false });
-    if (!error) setEvents(data);
-    setLoading(false);
-  }
 
   const q = search.trim().toLowerCase();
 
@@ -71,7 +74,7 @@ export default function EventsListScreen({ navigation }) {
     { key: 'done',     label: t.filterDone },
   ];
 
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator size="large" color="#5B6EF5" /></View>;
   }
 
@@ -80,7 +83,10 @@ export default function EventsListScreen({ navigation }) {
       <OfflineBanner />
 
       <View style={styles.headerRow}>
-        <Text style={styles.title}>{t.events}</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>{t.events}</Text>
+          {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+        </View>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => navigation.navigate('AddEvent')}
@@ -187,6 +193,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     marginTop: 8,
   },
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
   title: { fontSize: 26, fontWeight: '700', color: '#1a1a2e' },
   addBtn: {
     backgroundColor: '#5B6EF5',
