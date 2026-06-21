@@ -1,0 +1,26 @@
+export const colors = {
+  light: {
+    background: '#F8F6F3', card: '#FFFFFF', border: '#F0EDE8',
+    text: '#1F2937', textMuted: '#6B7280',
+    primary: '#6366F1', primarySoft: '#EEF2FF', onPrimary: '#FFFFFF', accentGlyph: '#6366F1',
+    green: '#10B981', greenSoft: '#E8F5EE', red: '#EF4444', redSoft: '#FDECEC',
+    heroFill: '#F5F3FF', heroCircle: '#ECE8FB',
+    statPeachBg: '#FEE9DC', statPeachFg: '#E8743B',
+    statGreenBg: '#E8F5EE', statGreenFg: '#10B981',
+    statIndigoBg: '#EEF2FF', statIndigoFg: '#6366F1',
+    emojiBg: '#EEF2FF', tabBarBg: '#FFFFFF', tabBarBorder: '#F0EDE8',
+    tabInactive: '#9CA3AF', homeIndicator: 'rgba(31,41,55,0.22)',
+  },
+  dark: {
+    background: '#0F1117', card: '#1A1D27', border: '#2A2D3A',
+    text: '#F9FAFB', textMuted: '#9CA3AF',
+    primary: '#6366F1', primarySoft: '#1E1B4B', onPrimary: '#FFFFFF', accentGlyph: '#A5B4FC',
+    green: '#34D399', greenSoft: '#052E16', red: '#F87171', redSoft: '#2D0A0A',
+    heroFill: '#1E2035', heroCircle: '#252840',
+    statPeachBg: '#1E1B4B', statPeachFg: '#818CF8',
+    statGreenBg: '#052E16', statGreenFg: '#34D399',
+    statIndigoBg: '#2D0A0A', statIndigoFg: '#F87171',
+    emojiBg: '#1E1B4B', tabBarBg: '#1A1D27', tabBarBorder: '#2A2D3A',
+    tabInactive: '#6B7280', homeIndicator: 'rgba(255,255,255,0.30)',
+  },
+};

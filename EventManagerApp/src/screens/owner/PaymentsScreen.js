@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { useTheme } from '../../context/ThemeContext';
+import { cardShadow } from '../../theme/shadows';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import OfflineBanner from '../../components/OfflineBanner';
 import { t } from '../../i18n/he';
@@ -43,6 +45,8 @@ async function fetchPayments() {
 }
 
 export default function PaymentsScreen() {
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
   const queryClient = useQueryClient();
 
   const { data: sections = [], isLoading, isFetching } = useQuery({
@@ -54,10 +58,7 @@ export default function PaymentsScreen() {
     mutationFn: async ({ assignmentId, newPaid }) => {
       const { error } = await supabase
         .from('event_workers')
-        .update({
-          is_paid: newPaid,
-          paid_at: newPaid ? new Date().toISOString() : null,
-        })
+        .update({ is_paid: newPaid, paid_at: newPaid ? new Date().toISOString() : null })
         .eq('id', assignmentId);
       if (error) throw error;
     },
@@ -65,13 +66,11 @@ export default function PaymentsScreen() {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['worker-payments'] });
-      // Invalidate all cached event detail screens since payment status changed
       queryClient.invalidateQueries({ queryKey: ['event-detail'] });
     },
     onError: (error) => Alert.alert(t.error, error.message),
   });
 
-  // Which assignment row is currently being toggled
   const togglingId = toggleMutation.isLoading ? toggleMutation.variables?.assignmentId : null;
 
   function confirmToggle(assignment) {
@@ -95,18 +94,22 @@ export default function PaymentsScreen() {
   }
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#5B6EF5" /></View>;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
   }
 
   if (sections.length === 0) {
     return (
       <ScreenWrapper>
         <OfflineBanner />
-        <Text style={styles.pageTitle}>{t.paymentsTitle}</Text>
+        <Text style={[styles.pageTitle, { color: c.text }]}>{t.paymentsTitle}</Text>
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>💰</Text>
-          <Text style={styles.emptyText}>{t.noPayments}</Text>
-          <Text style={styles.emptySubtext}>{t.noPaymentsSubtext}</Text>
+          <Text style={[styles.emptyText, { color: c.text }]}>{t.noPayments}</Text>
+          <Text style={[styles.emptySubtext, { color: c.textMuted }]}>{t.noPaymentsSubtext}</Text>
         </View>
       </ScreenWrapper>
     );
@@ -127,43 +130,62 @@ export default function PaymentsScreen() {
         ListHeaderComponent={
           <>
             <View style={styles.titleRow}>
-              <Text style={styles.pageTitle}>{t.paymentsTitle}</Text>
-              {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+              <Text style={[styles.pageTitle, { color: c.text }]}>{t.paymentsTitle}</Text>
+              {isFetching && (
+                <ActivityIndicator size="small" color={c.textMuted} style={{ marginStart: 8 }} />
+              )}
             </View>
 
-            <View style={styles.summaryCard}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryAmount}>₪{grandOwed.toFixed(0)}</Text>
-                <Text style={styles.summaryLabel}>{t.totalOwed}</Text>
+            {/* Summary card — 3 cells with 1px dividers */}
+            <View style={[
+              styles.summaryCard,
+              { backgroundColor: c.card, borderColor: c.border },
+              shadow,
+            ]}>
+              <View style={styles.summaryCell}>
+                <Text style={[styles.summaryAmount, { color: c.text }]}>₪{grandOwed.toFixed(0)}</Text>
+                <Text style={[styles.summaryLabel, { color: c.textMuted }]}>{t.totalOwed}</Text>
               </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryAmount, styles.amountPaid]}>₪{grandPaid.toFixed(0)}</Text>
-                <Text style={styles.summaryLabel}>{t.totalPaid}</Text>
+              <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+              <View style={styles.summaryCell}>
+                <Text style={[styles.summaryAmount, { color: c.green }]}>₪{grandPaid.toFixed(0)}</Text>
+                <Text style={[styles.summaryLabel, { color: c.textMuted }]}>{t.totalPaid}</Text>
               </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryAmount, styles.amountUnpaid]}>₪{grandUnpaid.toFixed(0)}</Text>
-                <Text style={styles.summaryLabel}>{t.totalUnpaid}</Text>
+              <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+              <View style={styles.summaryCell}>
+                <Text style={[styles.summaryAmount, { color: c.red }]}>₪{grandUnpaid.toFixed(0)}</Text>
+                <Text style={[styles.summaryLabel, { color: c.textMuted }]}>{t.totalUnpaid}</Text>
               </View>
             </View>
           </>
         }
         renderSectionHeader={({ section }) => {
           const unpaid = section.totalOwed - section.totalPaid;
+          const allPaid = unpaid <= 0;
           return (
-            <View style={styles.workerHeader}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{section.worker?.name?.charAt(0).toUpperCase()}</Text>
+            <View style={[styles.workerHeader]}>
+              <View style={[styles.avatar, { backgroundColor: c.primarySoft }]}>
+                <Text style={[styles.avatarText, { color: c.accentGlyph }]}>
+                  {section.worker?.name?.charAt(0).toUpperCase()}
+                </Text>
               </View>
               <View style={styles.workerMeta}>
-                <Text style={styles.workerName}>{section.worker?.name}</Text>
+                <Text style={[styles.workerName, { color: c.text }]}>{section.worker?.name}</Text>
                 <View style={styles.workerTotals}>
-                  {unpaid > 0 && (
-                    <Text style={styles.unpaidChip}>₪{unpaid.toFixed(0)} {t.totalUnpaid}</Text>
+                  {!allPaid && (
+                    <Text style={[styles.unpaidChip, { color: c.red, backgroundColor: c.redSoft }]}>
+                      ₪{unpaid.toFixed(0)} {t.totalUnpaid}
+                    </Text>
                   )}
-                  {section.totalPaid > 0 && (
-                    <Text style={styles.paidChip}>₪{section.totalPaid.toFixed(0)} {t.totalPaid}</Text>
+                  {allPaid && (
+                    <Text style={[styles.paidChip, { color: c.green, backgroundColor: c.greenSoft }]}>
+                      ✓ שולם הכל
+                    </Text>
+                  )}
+                  {section.totalPaid > 0 && !allPaid && (
+                    <Text style={[styles.paidChip, { color: c.green, backgroundColor: c.greenSoft }]}>
+                      ₪{section.totalPaid.toFixed(0)} {t.totalPaid}
+                    </Text>
                   )}
                 </View>
               </View>
@@ -171,24 +193,40 @@ export default function PaymentsScreen() {
           );
         }}
         renderItem={({ item }) => (
-          <View style={[styles.assignmentRow, item.is_paid && styles.assignmentRowPaid]}>
-            <View style={styles.assignmentInfo}>
-              <Text style={styles.eventTitle} numberOfLines={1}>{item.events?.title}</Text>
-              <Text style={styles.eventDate}>{formatDate(item.events?.date)}</Text>
+          <View style={[
+            styles.paymentRow,
+            { backgroundColor: c.card, borderColor: c.border, opacity: item.is_paid ? 0.8 : 1 },
+            shadow,
+          ]}>
+            <View style={styles.paymentInfo}>
+              <Text style={[styles.paymentEventTitle, { color: c.text }]} numberOfLines={1}>
+                {item.events?.title}
+              </Text>
+              <Text style={[styles.paymentDate, { color: c.textMuted }]}>
+                {formatDate(item.events?.date)}
+              </Text>
             </View>
-            <View style={styles.assignmentRight}>
-              <Text style={[styles.payAmount, item.is_paid ? styles.amountPaid : styles.amountUnpaid]}>
+            <View style={styles.paymentRight}>
+              <Text style={[styles.paymentAmount, {
+                color: item.is_paid ? c.green : c.red,
+              }]}>
                 ₪{(item.pay_amount || 0).toFixed(0)}
               </Text>
               <TouchableOpacity
-                style={[styles.toggleBtn, item.is_paid ? styles.toggleBtnPaid : styles.toggleBtnUnpaid]}
+                style={[
+                  styles.toggleBtn,
+                  { backgroundColor: item.is_paid ? c.border : c.green },
+                ]}
                 onPress={() => confirmToggle(item)}
                 disabled={togglingId === item.id}
                 activeOpacity={0.8}
               >
                 {togglingId === item.id
-                  ? <ActivityIndicator size="small" color={item.is_paid ? '#6B7280' : '#fff'} />
-                  : <Text style={[styles.toggleBtnText, item.is_paid && styles.toggleBtnTextPaid]}>
+                  ? <ActivityIndicator size="small" color={item.is_paid ? c.textMuted : '#fff'} />
+                  : <Text style={[
+                      styles.toggleBtnText,
+                      { color: item.is_paid ? c.textMuted : '#fff' },
+                    ]}>
                       {item.is_paid ? t.markAsUnpaid : t.markAsPaid}
                     </Text>
                 }
@@ -196,86 +234,69 @@ export default function PaymentsScreen() {
             </View>
           </View>
         )}
-        SectionSeparatorComponent={() => <View style={styles.sectionSeparator} />}
+        SectionSeparatorComponent={() => <View style={{ height: 8 }} />}
       />
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 16,
-    marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 22, marginTop: 16, marginBottom: 16,
   },
-  pageTitle: {
-    fontSize: 26, fontWeight: '700', color: '#1a1a2e',
-    textAlign: rtl ? 'right' : 'left',
-  },
+  pageTitle: { fontSize: 25, fontWeight: '800', textAlign: rtl ? 'right' : 'left' },
 
   summaryCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, marginHorizontal: 20, marginBottom: 24,
-    flexDirection: 'row', padding: 20,
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 16, borderWidth: 1,
+    marginHorizontal: 22, marginBottom: 24,
+    flexDirection: 'row',
   },
-  summaryItem: { flex: 1, alignItems: 'center' },
-  summaryDivider: { width: 1, backgroundColor: '#E5E7EB', marginVertical: 4 },
-  summaryAmount: { fontSize: 22, fontWeight: '700', color: '#1a1a2e' },
-  summaryLabel: { fontSize: 12, color: '#9CA3AF', marginTop: 4, fontWeight: '600' },
+  summaryCell: { flex: 1, alignItems: 'center', paddingVertical: 16 },
+  summaryDivider: { width: 1, marginVertical: 10 },
+  summaryAmount: { fontSize: 20, fontWeight: '800' },
+  summaryLabel: { fontSize: 12, fontWeight: '600', marginTop: 4 },
 
   workerHeader: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10,
+    paddingHorizontal: 22, paddingTop: 8, paddingBottom: 10,
   },
   avatar: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: '#5B6EF5',
+    width: 44, height: 44, borderRadius: 22,
     justifyContent: 'center', alignItems: 'center', marginEnd: 12,
   },
-  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  avatarText: { fontSize: 18, fontWeight: '700' },
   workerMeta: { flex: 1 },
-  workerName: { fontSize: 17, fontWeight: '700', color: '#1a1a2e', textAlign: rtl ? 'right' : 'left' },
+  workerName: { fontSize: 17, fontWeight: '700', textAlign: rtl ? 'right' : 'left' },
   workerTotals: { flexDirection: 'row', gap: 8, marginTop: 4 },
   unpaidChip: {
-    fontSize: 12, fontWeight: '600', color: '#e74c3c',
-    backgroundColor: '#FEE2E2', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
+    fontSize: 12, fontWeight: '600',
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
   },
   paidChip: {
-    fontSize: 12, fontWeight: '600', color: '#10B981',
-    backgroundColor: '#ECFDF5', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
+    fontSize: 12, fontWeight: '600',
+    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2,
   },
 
-  assignmentRow: {
+  paymentRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', marginHorizontal: 20, marginBottom: 8,
-    borderRadius: 16, padding: 16,
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    marginHorizontal: 22, marginBottom: 8,
+    borderRadius: 12, borderWidth: 1,
+    paddingVertical: 12, paddingHorizontal: 14,
   },
-  assignmentRowPaid: { opacity: 0.75 },
-  assignmentInfo: { flex: 1, marginEnd: 12 },
-  eventTitle: { fontSize: 15, fontWeight: '600', color: '#1a1a2e', textAlign: rtl ? 'right' : 'left' },
-  eventDate: { fontSize: 13, color: '#9CA3AF', marginTop: 2, textAlign: rtl ? 'right' : 'left' },
-  assignmentRight: { alignItems: 'flex-end', gap: 8 },
-  payAmount: { fontSize: 18, fontWeight: '700' },
-  amountPaid: { color: '#10B981' },
-  amountUnpaid: { color: '#e74c3c' },
-
+  paymentInfo: { flex: 1, marginEnd: 12 },
+  paymentEventTitle: { fontSize: 14, fontWeight: '600', textAlign: rtl ? 'right' : 'left' },
+  paymentDate: { fontSize: 12, marginTop: 2, textAlign: rtl ? 'right' : 'left' },
+  paymentRight: { alignItems: 'flex-end', gap: 8 },
+  paymentAmount: { fontSize: 16, fontWeight: '800' },
   toggleBtn: {
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, minWidth: 90, alignItems: 'center',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7,
+    minWidth: 90, alignItems: 'center',
   },
-  toggleBtnUnpaid: { backgroundColor: '#10B981' },
-  toggleBtnPaid:   { backgroundColor: '#F3F4F6' },
-  toggleBtnText:   { color: '#fff', fontSize: 13, fontWeight: '700' },
-  toggleBtnTextPaid: { color: '#6B7280' },
-
-  sectionSeparator: { height: 8 },
+  toggleBtnText: { fontSize: 13, fontWeight: '700' },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  emptySubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 8, textAlign: 'center' },
+  emptyText: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  emptySubtext: { fontSize: 14, marginTop: 8, textAlign: 'center' },
 });

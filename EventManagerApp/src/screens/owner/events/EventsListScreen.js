@@ -7,17 +7,35 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
+import { useTheme } from '../../../context/ThemeContext';
+import { cardShadow } from '../../../theme/shadows';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import OfflineBanner from '../../../components/OfflineBanner';
 import { t } from '../../../i18n/he';
 
 const rtl = I18nManager.isRTL;
 
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
+function getDateParts(dateStr) {
+  if (!dateStr) return { dd: '—', mm: '—' };
   const d = new Date(dateStr.length === 10 ? dateStr + 'T00:00:00' : dateStr);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+  if (isNaN(d.getTime())) return { dd: '—', mm: '—' };
+  return {
+    dd: d.getDate().toString(),
+    mm: d.toLocaleDateString('he-IL', { month: 'short' }),
+  };
+}
+
+function formatMeta(dateStr, time, venue) {
+  const parts = [];
+  if (dateStr) {
+    const d = new Date(dateStr.length === 10 ? dateStr + 'T00:00:00' : dateStr);
+    if (!isNaN(d.getTime())) {
+      parts.push(d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' }));
+    }
+  }
+  if (time) parts.push(`🕐 ${time}`);
+  if (venue) parts.push(`📍 ${venue}`);
+  return parts.join('  ');
 }
 
 function isToday(dateStr) {
@@ -36,6 +54,8 @@ async function fetchEvents() {
 }
 
 export default function EventsListScreen({ navigation }) {
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
@@ -44,7 +64,6 @@ export default function EventsListScreen({ navigation }) {
     queryFn: fetchEvents,
   });
 
-  // Clear search when leaving the screen — no data refetch needed here
   useFocusEffect(
     useCallback(() => {
       return () => setSearch('');
@@ -52,7 +71,6 @@ export default function EventsListScreen({ navigation }) {
   );
 
   const q = search.trim().toLowerCase();
-
   const filtered = events.filter(e => {
     const matchesFilter = filter === 'all' || e.status === filter;
     const matchesSearch = !q ||
@@ -61,7 +79,6 @@ export default function EventsListScreen({ navigation }) {
     return matchesFilter && matchesSearch;
   });
 
-  // Today's events always float to the top; original order preserved otherwise
   const sorted = [...filtered].sort((a, b) => {
     const aToday = isToday(a.date) ? 0 : 1;
     const bToday = isToday(b.date) ? 0 : 1;
@@ -75,47 +92,66 @@ export default function EventsListScreen({ navigation }) {
   ];
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#5B6EF5" /></View>;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
   }
 
   return (
     <ScreenWrapper>
       <OfflineBanner />
 
+      {/* Title row */}
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>{t.events}</Text>
-          {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+          <Text style={[styles.title, { color: c.text }]}>{t.events}</Text>
+          {isFetching && (
+            <ActivityIndicator size="small" color={c.textMuted} style={{ marginStart: 8 }} />
+          )}
         </View>
         <TouchableOpacity
-          style={styles.addBtn}
+          style={[styles.addBtn, { backgroundColor: c.primary }]}
           onPress={() => navigation.navigate('AddEvent')}
           activeOpacity={0.8}
         >
-          <Text style={styles.addBtnText}>{t.addNew}</Text>
+          <Text style={[styles.addBtnText, { color: c.onPrimary }]}>{t.addNew}</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Filter pills */}
       <View style={styles.filters}>
         {filters.map(f => (
           <TouchableOpacity
             key={f.key}
-            style={[styles.filterBtn, filter === f.key && styles.filterBtnActive]}
+            style={[
+              styles.filterBtn,
+              { backgroundColor: filter === f.key ? c.primary : c.card, borderColor: c.border },
+            ]}
             onPress={() => setFilter(f.key)}
           >
-            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>
+            <Text style={[
+              styles.filterText,
+              { color: filter === f.key ? c.onPrimary : c.textMuted },
+            ]}>
               {f.label}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+      {/* Search */}
+      <View style={[
+        styles.searchRow,
+        { backgroundColor: c.card, borderColor: c.border },
+        shadow,
+      ]}>
+        <Ionicons name="search-outline" size={18} color={c.textMuted} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: c.text }]}
           placeholder="חפש אירוע..."
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={c.textMuted}
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
@@ -129,13 +165,13 @@ export default function EventsListScreen({ navigation }) {
           {events.length === 0 ? (
             <>
               <Text style={styles.emptyIcon}>📅</Text>
-              <Text style={styles.emptyText}>{t.noEventsYet}</Text>
-              <Text style={styles.emptySubtext}>{t.tapToCreateEvent}</Text>
+              <Text style={[styles.emptyText, { color: c.text }]}>{t.noEventsYet}</Text>
+              <Text style={[styles.emptySubtext, { color: c.textMuted }]}>{t.tapToCreateEvent}</Text>
             </>
           ) : (
             <>
               <Text style={styles.emptyIcon}>🔍</Text>
-              <Text style={styles.emptyText}>לא נמצאו אירועים</Text>
+              <Text style={[styles.emptyText, { color: c.text }]}>לא נמצאו אירועים</Text>
             </>
           )}
         </View>
@@ -146,33 +182,54 @@ export default function EventsListScreen({ navigation }) {
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => {
             const today = isToday(item.date);
+            const done  = item.status === 'done';
+            const { dd, mm } = getDateParts(item.date);
             return (
               <TouchableOpacity
-                style={[styles.card, today && styles.cardToday]}
+                style={[
+                  styles.card,
+                  { backgroundColor: c.card, borderColor: today ? c.primary : c.border,
+                    borderWidth: today ? 1.5 : 1 },
+                  shadow,
+                ]}
                 onPress={() => navigation.navigate('EventDetail', { eventId: item.id })}
                 activeOpacity={0.75}
               >
-                <View style={[styles.statusBar, item.status === 'upcoming' ? styles.upcoming : styles.done]} />
-                <View style={styles.cardBody}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.eventTitle} numberOfLines={1}>{item.title}</Text>
-                    {today ? (
-                      <View style={styles.todayBadge}>
-                        <Text style={styles.todayBadgeText}>היום! 🎉</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.badge, item.status === 'upcoming' ? styles.badgeUpcoming : styles.badgeDone]}>
-                        <Text style={styles.badgeText}>
-                          {item.status === 'upcoming' ? `🔵 ${t.filterUpcoming}` : `✅ ${t.filterDone}`}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.eventDate}>
-                    📅 {formatDate(item.date)}{item.time ? `  🕐 ${item.time}` : ''}
+                {/* Date chip */}
+                <View style={[
+                  styles.dateChip,
+                  { backgroundColor: done ? c.border : c.primarySoft },
+                ]}>
+                  <Text style={[
+                    styles.dateChipDd,
+                    { color: done ? c.textMuted : (theme === 'dark' ? c.accentGlyph : c.primary) },
+                  ]}>
+                    {dd}
                   </Text>
-                  {item.venue ? <Text style={styles.eventVenue}>📍 {item.venue}</Text> : null}
+                  <Text style={[
+                    styles.dateChipMm,
+                    { color: done ? c.textMuted : (theme === 'dark' ? c.accentGlyph : c.primary) },
+                  ]}>
+                    {mm}
+                  </Text>
                 </View>
+
+                {/* Body */}
+                <View style={styles.cardBody}>
+                  <Text style={[styles.eventTitle, { color: c.text }]} numberOfLines={1}>
+                    {item.title}
+                  </Text>
+                  <Text style={[styles.eventMeta, { color: c.textMuted }]} numberOfLines={1}>
+                    {formatMeta(item.date, item.time, item.venue)}
+                  </Text>
+                </View>
+
+                {/* Today badge */}
+                {today && (
+                  <View style={[styles.todayBadge, { backgroundColor: c.primary }]}>
+                    <Text style={styles.todayBadgeText}>היום! 🎉</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           }}
@@ -183,114 +240,70 @@ export default function EventsListScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
     marginBottom: 16,
     marginTop: 8,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: '700', color: '#1a1a2e' },
-  addBtn: {
-    backgroundColor: '#5B6EF5',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  title: { fontSize: 25, fontWeight: '800' },
+  addBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  addBtnText: { fontWeight: '700', fontSize: 15 },
 
   filters: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
     marginBottom: 12,
     gap: 8,
   },
   filterBtn: {
-    paddingHorizontal: 16,
-    minHeight: 40,
-    justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 16, minHeight: 38,
+    justifyContent: 'center', borderRadius: 10, borderWidth: 1,
   },
-  filterBtnActive: { backgroundColor: '#5B6EF5' },
-  filterText: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
-  filterTextActive: { color: '#fff' },
+  filterText: { fontSize: 14, fontWeight: '600' },
 
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    marginHorizontal: 20,
+    borderWidth: 1,
+    marginHorizontal: 22,
     marginBottom: 16,
     paddingHorizontal: 12,
     height: 44,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
   },
   searchIcon: { marginEnd: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: '#1a1a2e' },
+  searchInput: { flex: 1, fontSize: 15 },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyIcon: { fontSize: 56, marginBottom: 12 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#374151' },
-  emptySubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 4 },
+  emptyText: { fontSize: 18, fontWeight: '600' },
+  emptySubtext: { fontSize: 14, marginTop: 4 },
 
   card: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    marginBottom: 12,
-    marginHorizontal: 20,
+    marginBottom: 13,
+    marginHorizontal: 22,
     flexDirection: 'row',
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  cardToday: {
-    borderWidth: 1.5,
-    borderColor: '#F59E0B',
-    elevation: 4,
-    shadowOpacity: 0.12,
-  },
-  statusBar: { width: 6 },
-  upcoming: { backgroundColor: '#5B6EF5' },
-  done: { backgroundColor: '#27ae60' },
-  cardBody: { flex: 1, paddingHorizontal: 16, paddingVertical: 14 },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    padding: 15,
+    gap: 14,
   },
-  eventTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#1a1a2e',
-    flex: 1,
-    marginEnd: 8,
-    textAlign: rtl ? 'right' : 'left',
+  dateChip: {
+    width: 54, borderRadius: 12,
+    paddingVertical: 9,
+    alignItems: 'center',
   },
-  badge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  badgeUpcoming: { backgroundColor: '#EEF2FF' },
-  badgeDone: { backgroundColor: '#ECFDF5' },
-  badgeText: { fontSize: 12, fontWeight: '600' },
+  dateChipDd: { fontSize: 20, fontWeight: '800' },
+  dateChipMm: { fontSize: 10, fontWeight: '700' },
+  cardBody: { flex: 1 },
+  eventTitle: { fontSize: 16, fontWeight: '800' },
+  eventMeta: { fontSize: 12.5, fontWeight: '500', marginTop: 3 },
   todayBadge: {
-    backgroundColor: '#F59E0B',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4,
   },
   todayBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700' },
-  eventDate: { fontSize: 14, color: '#6B7280', marginBottom: 4, textAlign: rtl ? 'right' : 'left' },
-  eventVenue: { fontSize: 14, color: '#9CA3AF', textAlign: rtl ? 'right' : 'left' },
 });

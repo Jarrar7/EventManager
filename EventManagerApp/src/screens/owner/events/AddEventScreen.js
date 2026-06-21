@@ -9,6 +9,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../context/AuthContext';
+import { useTheme } from '../../../context/ThemeContext';
+import { cardShadow } from '../../../theme/shadows';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import Toast, { useToast } from '../../../components/Toast';
 import { t } from '../../../i18n/he';
@@ -33,17 +35,20 @@ function defaultTimeDate() {
 
 export default function AddEventScreen({ navigation }) {
   const { profile } = useAuth();
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
   const queryClient = useQueryClient();
-  const [title, setTitle] = useState('');
+
+  const [title, setTitle]               = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedTime, setSelectedTime] = useState(defaultTimeDate());
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [venue, setVenue] = useState('');
-  const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [venue, setVenue]               = useState('');
+  const [notes, setNotes]               = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [errorMsg, setErrorMsg]         = useState('');
+  const [fieldErrors, setFieldErrors]   = useState({});
   const { showToast, toastMessage, toastOpacity } = useToast();
 
   function onDateChange(event, date) {
@@ -82,202 +87,210 @@ export default function AddEventScreen({ navigation }) {
     setTimeout(() => navigation.navigate('EventsList'), 800);
   }
 
+  const inputBase = {
+    backgroundColor: c.card, borderWidth: 1, borderColor: c.border,
+    borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16,
+    fontSize: 15, fontWeight: '700', color: c.text, textAlign: 'right',
+    ...(theme === 'light' ? cardShadow : {}),
+  };
+
   return (
     <ScreenWrapper>
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
 
-        {/* Top row: back button + title */}
-        <View style={styles.topRow}>
-          <TouchableOpacity onPress={() => navigation.navigate('EventsList')} style={styles.backBtn} activeOpacity={0.7}>
-            <Ionicons
-              name={rtl ? 'arrow-forward-outline' : 'arrow-back-outline'}
-              size={24}
-              color="#5B6EF5"
-            />
+          {/* Top row: back + title */}
+          <View style={styles.topRow}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('EventsList')}
+              style={styles.backBtn}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={rtl ? 'arrow-forward-outline' : 'arrow-back-outline'}
+                size={24}
+                color={c.primary}
+              />
+            </TouchableOpacity>
+            <Text style={[styles.title, { color: c.text }]}>{t.newEvent}</Text>
+            <View style={styles.backBtn} />
+          </View>
+
+          {errorMsg !== '' && (
+            <View style={[styles.errorBox, { backgroundColor: c.redSoft }]}>
+              <Text style={[styles.errorText, { color: c.red }]}>⚠️ {errorMsg}</Text>
+            </View>
+          )}
+
+          {/* Title field */}
+          <Text style={[styles.fieldLabel, { color: c.textMuted }]}>{t.eventTitleLabel}</Text>
+          <TextInput
+            style={[inputBase, fieldErrors.title && { borderColor: c.red }, { marginBottom: 13 }]}
+            placeholder={t.phEventTitle}
+            placeholderTextColor={c.textMuted}
+            value={title}
+            onChangeText={v => { setTitle(v); setFieldErrors(p => ({ ...p, title: undefined })); }}
+            textAlign={rtl ? 'right' : 'left'}
+          />
+          {fieldErrors.title && <Text style={[styles.fieldError, { color: c.red }]}>{fieldErrors.title}</Text>}
+
+          {/* Date + Time row */}
+          <View style={styles.dateTimeRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.fieldLabel, { color: c.textMuted }]}>{t.eventDateLabel}</Text>
+              <TouchableOpacity
+                style={[inputBase, styles.pickerBtn, { marginBottom: 0 }]}
+                onPress={() => setShowDatePicker(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.pickerBtnText, { color: c.text }]} numberOfLines={1}>
+                  {formatDisplayDate(selectedDate)}
+                </Text>
+                <Ionicons name="calendar-outline" size={16} color={c.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.fieldLabel, { color: c.textMuted }]}>{t.timeLabel}</Text>
+              <TouchableOpacity
+                style={[inputBase, styles.pickerBtn, { marginBottom: 0 }]}
+                onPress={() => setShowTimePicker(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.pickerBtnText, { color: c.text }]}>
+                  {formatTimeDisplay(selectedTime)}
+                </Text>
+                <Ionicons name="time-outline" size={16} color={c.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {showDatePicker && (
+            <View style={[styles.iosPickerWrapper, { backgroundColor: c.card }]}>
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                onChange={onDateChange}
+                locale="he-IL"
+                style={Platform.OS === 'ios' ? styles.iosPicker : undefined}
+              />
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[styles.pickerDoneBtn, { backgroundColor: c.primary }]}
+                  onPress={() => setShowDatePicker(false)}
+                >
+                  <Text style={[styles.pickerDoneText, { color: c.onPrimary }]}>{t.confirmDate}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {showTimePicker && (
+            <View style={[styles.iosPickerWrapper, { backgroundColor: c.card }]}>
+              <DateTimePicker
+                value={selectedTime}
+                mode="time"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                onChange={onTimeChange}
+                locale="he-IL"
+                style={Platform.OS === 'ios' ? styles.iosPicker : undefined}
+              />
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[styles.pickerDoneBtn, { backgroundColor: c.primary }]}
+                  onPress={() => setShowTimePicker(false)}
+                >
+                  <Text style={[styles.pickerDoneText, { color: c.onPrimary }]}>{t.confirmDate}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Venue */}
+          <Text style={[styles.fieldLabel, { color: c.textMuted, marginTop: 13 }]}>{t.venueLabel}</Text>
+          <TextInput
+            style={[inputBase, { marginBottom: 13 }]}
+            placeholder={t.phVenue}
+            placeholderTextColor={c.textMuted}
+            value={venue}
+            onChangeText={setVenue}
+            textAlign={rtl ? 'right' : 'left'}
+          />
+
+          {/* Notes */}
+          <Text style={[styles.fieldLabel, { color: c.textMuted }]}>{t.notesLabel}</Text>
+          <TextInput
+            style={[inputBase, { minHeight: 94, textAlignVertical: 'top', marginBottom: 24 }]}
+            placeholder={t.phNotes}
+            placeholderTextColor={c.textMuted}
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            numberOfLines={4}
+            textAlign={rtl ? 'right' : 'left'}
+            textAlignVertical="top"
+          />
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, { backgroundColor: c.primary, opacity: loading ? 0.6 : 1 }]}
+            onPress={handleCreate}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            {loading
+              ? <ActivityIndicator color={c.onPrimary} />
+              : <Text style={[styles.primaryBtnText, { color: c.onPrimary }]}>{t.createEvent}</Text>
+            }
           </TouchableOpacity>
-          <Text style={styles.title}>{t.newEvent}</Text>
-          <View style={styles.backBtn} />
-        </View>
 
-        {errorMsg !== '' && (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>⚠️ {errorMsg}</Text>
-          </View>
-        )}
-
-        <Text style={styles.label}>{t.eventTitleLabel}</Text>
-        <TextInput
-          style={[styles.input, fieldErrors.title && styles.inputError]}
-          placeholder={t.phEventTitle}
-          placeholderTextColor="#9CA3AF"
-          value={title}
-          onChangeText={v => { setTitle(v); setFieldErrors(p => ({ ...p, title: undefined })); }}
-          textAlign={rtl ? 'right' : 'left'}
-        />
-        {fieldErrors.title && <Text style={styles.fieldError}>{fieldErrors.title}</Text>}
-
-        <Text style={styles.label}>{t.eventDateLabel}</Text>
-        <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)} activeOpacity={0.8}>
-          <Text style={styles.dateButtonText}>📅 {formatDisplayDate(selectedDate)}</Text>
-        </TouchableOpacity>
-
-        {showDatePicker && (
-          <View style={Platform.OS === 'ios' ? styles.iosPickerWrapper : null}>
-            <DateTimePicker
-              value={selectedDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'inline' : 'default'}
-              onChange={onDateChange}
-              locale="he-IL"
-              style={Platform.OS === 'ios' ? styles.iosPicker : undefined}
-            />
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowDatePicker(false)}>
-                <Text style={styles.pickerDoneText}>{t.confirmDate}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        <Text style={styles.label}>{t.timeLabel}</Text>
-        <TouchableOpacity style={styles.dateButton} onPress={() => setShowTimePicker(true)} activeOpacity={0.8}>
-          <Text style={styles.dateButtonText}>🕐 {formatTimeDisplay(selectedTime)}</Text>
-        </TouchableOpacity>
-
-        {showTimePicker && (
-          <View style={Platform.OS === 'ios' ? styles.iosPickerWrapper : null}>
-            <DateTimePicker
-              value={selectedTime}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={onTimeChange}
-              locale="he-IL"
-              style={Platform.OS === 'ios' ? styles.iosPicker : undefined}
-            />
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity style={styles.pickerDoneBtn} onPress={() => setShowTimePicker(false)}>
-                <Text style={styles.pickerDoneText}>{t.confirmDate}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        <Text style={styles.label}>{t.venueLabel}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={t.phVenue}
-          placeholderTextColor="#9CA3AF"
-          value={venue}
-          onChangeText={setVenue}
-          textAlign={rtl ? 'right' : 'left'}
-        />
-
-        <Text style={styles.label}>{t.notesLabel}</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder={t.phNotes}
-          placeholderTextColor="#9CA3AF"
-          value={notes}
-          onChangeText={setNotes}
-          multiline
-          numberOfLines={4}
-          textAlign={rtl ? 'right' : 'left'}
-          textAlignVertical="top"
-        />
-
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleCreate}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          {loading
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.buttonText}>{t.createEvent}</Text>
-          }
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.navigate('EventsList')}>
-          <Text style={styles.cancelText}>{t.cancel}</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
-    <Toast message={toastMessage} opacity={toastOpacity} />
+          <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.navigate('EventsList')}>
+            <Text style={[styles.cancelText, { color: c.textMuted }]}>{t.cancel}</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+      <Toast message={toastMessage} opacity={toastOpacity} />
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1 },
-  container: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
+  container: { paddingHorizontal: 22, paddingTop: 16, paddingBottom: 48 },
 
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20,
   },
   backBtn: { width: 36, height: 36, justifyContent: 'center', alignItems: 'center' },
-  title: {
-    fontSize: 22, fontWeight: '700', color: '#1a1a2e',
-    textAlign: 'center', flex: 1,
+  title: { fontSize: 22, fontWeight: '800', textAlign: 'center', flex: 1 },
+
+  errorBox: { borderRadius: 10, padding: 14, marginBottom: 16 },
+  errorText: { fontSize: 14, fontWeight: '600', textAlign: rtl ? 'right' : 'left' },
+
+  fieldLabel: {
+    fontSize: 13, fontWeight: '700', marginBottom: 6,
+    textAlign: rtl ? 'right' : 'left',
+  },
+  fieldError: {
+    fontSize: 12, fontWeight: '600', marginTop: -8, marginBottom: 10,
+    textAlign: rtl ? 'right' : 'left',
   },
 
-  errorBox: { backgroundColor: '#FEE2E2', borderRadius: 10, padding: 14, marginBottom: 16 },
-  errorText: { color: '#c0392b', fontSize: 14, fontWeight: '600', textAlign: rtl ? 'right' : 'left' },
-  label: {
-    fontSize: 14, fontWeight: '600', color: '#374151',
-    marginBottom: 6, textAlign: rtl ? 'right' : 'left',
+  dateTimeRow: { flexDirection: 'row', gap: 12, marginBottom: 0 },
+  pickerBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#1a1a2e',
-    marginBottom: 4,
-  },
-  inputError: { borderColor: '#e74c3c' },
-  fieldError: {
-    color: '#e74c3c', fontSize: 12, fontWeight: '600',
-    marginBottom: 14, textAlign: rtl ? 'right' : 'left',
-  },
-  textArea: { height: 100, marginBottom: 18 },
-  dateButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 18,
-    alignItems: rtl ? 'flex-end' : 'flex-start',
-  },
-  dateButtonText: { fontSize: 15, color: '#1a1a2e', fontWeight: '500' },
+  pickerBtnText: { fontSize: 14, fontWeight: '700', flex: 1, marginEnd: 4 },
+
   iosPickerWrapper: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 18,
-    overflow: 'hidden',
+    borderRadius: 16, marginTop: 8, marginBottom: 8, overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, elevation: 4,
   },
   iosPicker: { width: '100%' },
-  pickerDoneBtn: {
-    backgroundColor: '#5B6EF5', margin: 12, borderRadius: 10,
-    paddingVertical: 12, alignItems: 'center',
-  },
-  pickerDoneText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  button: {
-    backgroundColor: '#5B6EF5',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
-  cancelBtn: { alignItems: 'center', marginTop: 16, padding: 12 },
-  cancelText: { fontSize: 16, color: '#9CA3AF' },
+  pickerDoneBtn: { margin: 12, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  pickerDoneText: { fontWeight: '700', fontSize: 16 },
+
+  primaryBtn: { borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
+  primaryBtnText: { fontSize: 16, fontWeight: '800' },
+  cancelBtn: { alignItems: 'center', marginTop: 14, padding: 10 },
+  cancelText: { fontSize: 15, fontWeight: '600' },
 });

@@ -5,6 +5,8 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { cardShadow } from '../../theme/shadows';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import OfflineBanner from '../../components/OfflineBanner';
 import { t } from '../../i18n/he';
@@ -20,6 +22,8 @@ function formatDate(dateStr) {
 
 export default function WorkerPaymentsScreen() {
   const { profile } = useAuth();
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
 
   const { data: rows = [], isLoading, isFetching } = useQuery({
     queryKey: ['worker-payments', profile?.id],
@@ -41,7 +45,11 @@ export default function WorkerPaymentsScreen() {
   const totalPending = totalEarned - totalPaid;
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#27ae60" /></View>;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
   }
 
   return (
@@ -53,56 +61,65 @@ export default function WorkerPaymentsScreen() {
         contentContainerStyle={{ paddingBottom: 32 }}
         ListHeaderComponent={
           <>
+            {/* Title */}
             <View style={styles.titleRow}>
-              <Text style={styles.pageTitle}>{t.myPaymentsTitle}</Text>
-              {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+              <Text style={[styles.pageTitle, { color: c.text }]}>{t.myPaymentsTitle}</Text>
+              {isFetching && <ActivityIndicator size="small" color={c.textMuted} style={{ marginStart: 8 }} />}
             </View>
 
+            {/* 3-cell summary card */}
             {rows.length > 0 && (
-              <View style={styles.summaryCard}>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryAmount}>₪{totalEarned.toFixed(0)}</Text>
-                  <Text style={styles.summaryLabel}>{t.workerTotalEarned}</Text>
+              <View style={[styles.summaryCard, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+                <View style={styles.summaryCell}>
+                  <Text style={[styles.summaryAmount, { color: c.text }]}>₪{totalEarned.toFixed(0)}</Text>
+                  <Text style={[styles.summaryLabel, { color: c.textMuted }]}>{t.workerTotalEarned}</Text>
                 </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryAmount, styles.amountPaid]}>₪{totalPaid.toFixed(0)}</Text>
-                  <Text style={styles.summaryLabel}>{t.workerTotalPaid}</Text>
+                <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+                <View style={styles.summaryCell}>
+                  <Text style={[styles.summaryAmount, { color: c.green }]}>₪{totalPaid.toFixed(0)}</Text>
+                  <Text style={[styles.summaryLabel, { color: c.textMuted }]}>{t.workerTotalPaid}</Text>
                 </View>
-                <View style={styles.summaryDivider} />
-                <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryAmount, styles.amountPending]}>₪{totalPending.toFixed(0)}</Text>
-                  <Text style={styles.summaryLabel}>{t.workerTotalPending}</Text>
+                <View style={[styles.summaryDivider, { backgroundColor: c.border }]} />
+                <View style={styles.summaryCell}>
+                  <Text style={[styles.summaryAmount, { color: c.red }]}>₪{totalPending.toFixed(0)}</Text>
+                  <Text style={[styles.summaryLabel, { color: c.textMuted }]}>{t.workerTotalPending}</Text>
                 </View>
               </View>
+            )}
+
+            {/* Section label */}
+            {rows.length > 0 && (
+              <Text style={[styles.sectionLabel, { color: c.textMuted }]}>אירועים</Text>
             )}
           </>
         }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>💵</Text>
-            <Text style={styles.emptyText}>{t.noWorkerPayments}</Text>
-            <Text style={styles.emptySubtext}>{t.noWorkerPaymentsSubtext}</Text>
+            <Text style={[styles.emptyText, { color: c.text }]}>{t.noWorkerPayments}</Text>
+            <Text style={[styles.emptySubtext, { color: c.textMuted }]}>{t.noWorkerPaymentsSubtext}</Text>
           </View>
         }
         renderItem={({ item }) => (
-          <View style={[styles.card, item.is_paid && styles.cardPaid]}>
-            <View style={[styles.stripe, item.is_paid ? styles.stripePaid : styles.stripeUnpaid]} />
-            <View style={styles.cardBody}>
-              <View style={styles.cardTop}>
-                <Text style={styles.eventTitle} numberOfLines={1}>{item.events?.title}</Text>
-                <Text style={[styles.statusBadge, item.is_paid ? styles.badgePaid : styles.badgeUnpaid]}>
-                  {item.is_paid ? '✅ שולם' : '🔴 ממתין'}
+          <View style={[styles.historyRow, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+            <View style={styles.historyInfo}>
+              <Text style={[styles.historyEventTitle, { color: c.text }]} numberOfLines={1}>
+                {item.events?.title}
+              </Text>
+              <Text style={[styles.historyDate, { color: c.textMuted }]}>
+                {formatDate(item.events?.date)}
+              </Text>
+            </View>
+            <View style={styles.historyRight}>
+              <Text style={[styles.historyAmount, { color: c.text }]}>
+                ₪{(item.pay_amount || 0).toFixed(0)}
+              </Text>
+              <View style={[styles.statusBadge, { backgroundColor: item.is_paid ? c.greenSoft : c.redSoft }]}>
+                <Text style={[styles.statusBadgeText, { color: item.is_paid ? c.green : c.red }]}>
+                  {item.is_paid ? 'שולם' : 'ממתין'}
                 </Text>
               </View>
-              <Text style={styles.eventDate}>📅 {formatDate(item.events?.date)}</Text>
-              {item.is_paid && item.paid_at && (
-                <Text style={styles.paidAt}>שולם ב־{formatDate(item.paid_at)}</Text>
-              )}
             </View>
-            <Text style={[styles.payAmount, item.is_paid ? styles.amountPaid : styles.amountPending]}>
-              ₪{(item.pay_amount || 0).toFixed(0)}
-            </Text>
           </View>
         )}
       />
@@ -111,57 +128,45 @@ export default function WorkerPaymentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 16,
-    marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 22, marginTop: 16, marginBottom: 16,
   },
-  pageTitle: {
-    fontSize: 26, fontWeight: '700', color: '#1a1a2e',
+  pageTitle: { fontSize: 25, fontWeight: '800', textAlign: rtl ? 'right' : 'left' },
+
+  summaryCard: {
+    borderRadius: 16, borderWidth: 1,
+    marginHorizontal: 22, marginBottom: 20,
+    flexDirection: 'row',
+  },
+  summaryCell: { flex: 1, alignItems: 'center', paddingVertical: 16 },
+  summaryDivider: { width: 1, marginVertical: 10 },
+  summaryAmount: { fontSize: 20, fontWeight: '800' },
+  summaryLabel: { fontSize: 11, fontWeight: '600', marginTop: 4, textAlign: 'center' },
+
+  sectionLabel: {
+    fontSize: 13, fontWeight: '800',
+    textTransform: 'uppercase', letterSpacing: 0.5,
+    paddingHorizontal: 22, marginBottom: 10,
     textAlign: rtl ? 'right' : 'left',
   },
 
-  summaryCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, marginHorizontal: 20, marginBottom: 20,
-    flexDirection: 'row', padding: 20,
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+  historyRow: {
+    borderRadius: 14, borderWidth: 1, marginBottom: 10,
+    marginHorizontal: 22,
+    paddingVertical: 13, paddingHorizontal: 15,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  summaryItem: { flex: 1, alignItems: 'center' },
-  summaryDivider: { width: 1, backgroundColor: '#E5E7EB', marginVertical: 4 },
-  summaryAmount: { fontSize: 20, fontWeight: '700', color: '#1a1a2e' },
-  summaryLabel: { fontSize: 11, color: '#9CA3AF', marginTop: 4, fontWeight: '600', textAlign: 'center' },
-  amountPaid: { color: '#10B981' },
-  amountPending: { color: '#e74c3c' },
-
-  card: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF',
-    marginHorizontal: 20, marginBottom: 12, borderRadius: 16, overflow: 'hidden',
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  },
-  cardPaid: { opacity: 0.8 },
-  stripe: { width: 5 },
-  stripePaid:   { backgroundColor: '#10B981', alignSelf: 'stretch' },
-  stripeUnpaid: { backgroundColor: '#e74c3c', alignSelf: 'stretch' },
-  cardBody: { flex: 1, padding: 14 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  eventTitle: {
-    fontSize: 15, fontWeight: '700', color: '#1a1a2e',
-    flex: 1, marginEnd: 8, textAlign: rtl ? 'right' : 'left',
-  },
-  statusBadge: { fontSize: 12, fontWeight: '700', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
-  badgePaid:   { color: '#10B981', backgroundColor: '#ECFDF5' },
-  badgeUnpaid: { color: '#e74c3c', backgroundColor: '#FEE2E2' },
-  eventDate: { fontSize: 13, color: '#9CA3AF', textAlign: rtl ? 'right' : 'left' },
-  paidAt: { fontSize: 12, color: '#10B981', marginTop: 4, textAlign: rtl ? 'right' : 'left' },
-  payAmount: { fontSize: 20, fontWeight: '700', marginHorizontal: 16 },
+  historyInfo: { flex: 1, marginEnd: 12 },
+  historyEventTitle: { fontSize: 14, fontWeight: '700', textAlign: rtl ? 'right' : 'left' },
+  historyDate: { fontSize: 12, marginTop: 2, textAlign: rtl ? 'right' : 'left' },
+  historyRight: { alignItems: 'flex-end', gap: 6 },
+  historyAmount: { fontSize: 15, fontWeight: '800' },
+  statusBadge: { borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700' },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, marginTop: 60 },
   emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  emptySubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 8, textAlign: 'center' },
+  emptyText: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  emptySubtext: { fontSize: 14, marginTop: 8, textAlign: 'center' },
 });

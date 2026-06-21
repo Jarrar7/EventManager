@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import { supabase } from './src/lib/supabase';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
@@ -98,10 +99,11 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+    <ThemeProvider>
     <SafeAreaProvider>
       <AuthProvider>
         <NavigationContainer>
-          <StatusBar style="dark" />
+          <StatusBar style="auto" />
           <RootScreen
             passwordResetPending={passwordResetPending}
             setPasswordResetPending={setPasswordResetPending}
@@ -109,6 +111,7 @@ export default function App() {
         </NavigationContainer>
       </AuthProvider>
     </SafeAreaProvider>
+    </ThemeProvider>
     </QueryClientProvider>
   );
 }

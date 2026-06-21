@@ -10,28 +10,32 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  I18nManager,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { cardShadow } from '../../theme/shadows';
 import { supabase } from '../../lib/supabase';
 import { t } from '../../i18n/he';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const rtl = I18nManager.isRTL;
 
 export default function LoginScreen() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { c, theme, toggleTheme } = useTheme();
+
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [loading, setLoading]       = useState(false);
   const [forgotMode, setForgotMode] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
 
   async function handleForgotPassword() {
     const trimmed = resetEmail.trim();
-    if (!trimmed) {
-      Alert.alert('שגיאה', 'יש להזין כתובת אימייל');
-      return;
-    }
+    if (!trimmed) { Alert.alert('שגיאה', 'יש להזין כתובת אימייל'); return; }
     setResetLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
       redirectTo: 'eventmanager://reset-password',
@@ -57,28 +61,59 @@ export default function LoginScreen() {
     if (error) Alert.alert(t.loginFailed, error.message);
   }
 
+  const shadow = theme === 'light' ? cardShadow : {};
+
+  const inputStyle = {
+    backgroundColor: c.card,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 15,
+    fontWeight: '700',
+    color: c.text,
+    marginBottom: 16,
+    textAlign: rtl ? 'right' : 'left',
+  };
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: c.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.card}>
+      {/* Theme toggle — top-right in RTL */}
+      <TouchableOpacity
+        style={[styles.themeToggle, { backgroundColor: c.card, borderColor: c.border }]}
+        onPress={toggleTheme}
+        activeOpacity={0.8}
+      >
+        <Ionicons
+          name={theme === 'dark' ? 'sunny-outline' : 'moon-outline'}
+          size={20}
+          color={c.accentGlyph}
+        />
+      </TouchableOpacity>
 
-        {/* App icon — colored circle with Hebrew initials */}
-        <View style={styles.iconCircle}>
-          <Text style={styles.iconText}>מא</Text>
+      <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+
+        {/* App icon */}
+        <View style={[styles.iconCircle, { backgroundColor: c.primarySoft }]}>
+          <Text style={[styles.iconText, { color: theme === 'dark' ? c.accentGlyph : c.primary }]}>
+            מא
+          </Text>
         </View>
 
-        <Text style={styles.title}>{t.appName}</Text>
-        <Text style={styles.subtitle}>{t.signInToAccount}</Text>
+        <Text style={[styles.title, { color: c.text }]}>{t.appName}</Text>
+        <Text style={[styles.subtitle, { color: c.textMuted }]}>{t.signInToAccount}</Text>
 
         {forgotMode ? (
           <>
-            <Text style={styles.label}>אימייל לאיפוס סיסמה</Text>
+            <Text style={[styles.label, { color: c.textMuted }]}>אימייל לאיפוס סיסמה</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
               placeholder={t.phEmail}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={c.textMuted}
               value={resetEmail}
               onChangeText={setResetEmail}
               autoCapitalize="none"
@@ -87,29 +122,33 @@ export default function LoginScreen() {
               onSubmitEditing={handleForgotPassword}
               textContentType="username"
               autoComplete="off"
+              writingDirection="ltr"
             />
             <TouchableOpacity
-              style={[styles.button, resetLoading && styles.buttonDisabled]}
+              style={[styles.button, { backgroundColor: c.primary }, resetLoading && styles.buttonDisabled]}
               onPress={handleForgotPassword}
               disabled={resetLoading}
               activeOpacity={0.8}
             >
               {resetLoading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.buttonText}>שלח קישור לאיפוס</Text>
+                ? <ActivityIndicator color={c.onPrimary} />
+                : <Text style={[styles.buttonText, { color: c.onPrimary }]}>שלח קישור לאיפוס</Text>
               }
             </TouchableOpacity>
-            <TouchableOpacity style={styles.forgotBtn} onPress={() => { setForgotMode(false); setResetEmail(''); }}>
-              <Text style={styles.forgotText}>חזרה להתחברות</Text>
+            <TouchableOpacity
+              style={styles.forgotBtn}
+              onPress={() => { setForgotMode(false); setResetEmail(''); }}
+            >
+              <Text style={[styles.forgotText, { color: c.primary }]}>חזרה להתחברות</Text>
             </TouchableOpacity>
           </>
         ) : (
           <>
-            <Text style={styles.label}>{t.email}</Text>
+            <Text style={[styles.label, { color: c.textMuted }]}>{t.email}</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
               placeholder={t.phEmail}
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={c.textMuted}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -117,13 +156,14 @@ export default function LoginScreen() {
               returnKeyType="next"
               textContentType="username"
               autoComplete="off"
+              writingDirection="ltr"
             />
 
-            <Text style={styles.label}>{t.password}</Text>
+            <Text style={[styles.label, { color: c.textMuted }]}>{t.password}</Text>
             <TextInput
-              style={styles.input}
+              style={inputStyle}
               placeholder="••••••••"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={c.textMuted}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -131,22 +171,23 @@ export default function LoginScreen() {
               autoComplete="off"
               returnKeyType="done"
               onSubmitEditing={handleLogin}
+              writingDirection="ltr"
             />
 
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled]}
+              style={[styles.button, { backgroundColor: c.primary }, loading && styles.buttonDisabled]}
               onPress={handleLogin}
               disabled={loading}
               activeOpacity={0.8}
             >
               {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.buttonText}>{t.signIn}</Text>
+                ? <ActivityIndicator color={c.onPrimary} />
+                : <Text style={[styles.buttonText, { color: c.onPrimary }]}>{t.signIn}</Text>
               }
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.forgotBtn} onPress={() => setForgotMode(true)}>
-              <Text style={styles.forgotText}>שכחתי סיסמה?</Text>
+              <Text style={[styles.forgotText, { color: c.primary }]}>שכחתי סיסמה?</Text>
             </TouchableOpacity>
           </>
         )}
@@ -159,83 +200,75 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F6F9',
     justifyContent: 'flex-start',
     paddingTop: SCREEN_HEIGHT * 0.18,
     paddingHorizontal: 20,
   },
-  card: {
-    backgroundColor: '#FFFFFF',
+
+  themeToggle: {
+    position: 'absolute',
+    top: 56,
+    // RTL: right side of screen is physical left, but 'end' respects RTL
+    end: 20,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    padding: 32,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
+
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 28,
+    width: '100%',
+  },
+
   iconCircle: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#5B6EF5',
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
     marginBottom: 16,
   },
   iconText: {
-    color: '#fff',
     fontSize: 26,
     fontWeight: '800',
   },
+
   title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#1a1a2e',
+    fontSize: 25,
+    fontWeight: '800',
     textAlign: 'center',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#9CA3AF',
+    fontSize: 14,
+    fontWeight: '500',
     textAlign: 'center',
     marginBottom: 28,
   },
+
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
+    fontSize: 13,
+    fontWeight: '700',
     marginBottom: 6,
-    alignSelf: 'flex-start',
+    textAlign: rtl ? 'right' : 'left',
   },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#1a1a2e',
-    marginBottom: 16,
-  },
+
   button: {
-    backgroundColor: '#5B6EF5',
-    borderRadius: 14,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: 'center',
     marginTop: 8,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { fontSize: 16, fontWeight: '800' },
+
   forgotBtn: { alignItems: 'center', marginTop: 16, padding: 12 },
-  forgotText: { fontSize: 15, color: '#5B6EF5', fontWeight: '600' },
+  forgotText: { fontSize: 13, fontWeight: '700' },
 });

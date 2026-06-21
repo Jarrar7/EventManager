@@ -1,106 +1,118 @@
 import React from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, I18nManager,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, I18nManager,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { cardShadow } from '../../theme/shadows';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import { t } from '../../i18n/he';
+import { Ionicons } from '@expo/vector-icons';
 
 const rtl = I18nManager.isRTL;
 
 export default function ProfileScreen() {
   const { profile, session, signOut } = useAuth();
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
 
   const initial = profile?.name?.charAt(0)?.toUpperCase() ?? '?';
-  const email = session?.user?.email ?? '—';
+  const email   = session?.user?.email ?? '—';
 
   return (
     <ScreenWrapper>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
 
-        {/* Avatar */}
-        <View style={styles.avatarWrap}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
+        {/* Centered avatar block */}
+        <View style={styles.heroBlock}>
+          <View style={[styles.avatar, { backgroundColor: c.primarySoft }]}>
+            <Text style={[styles.avatarText, { color: c.accentGlyph }]}>{initial}</Text>
           </View>
-          <Text style={styles.name}>{profile?.name}</Text>
-          <Text style={styles.role}>{t.workerRole}</Text>
+          <Text style={[styles.name, { color: c.text }]}>{profile?.name}</Text>
+          <View style={[styles.roleBadge, { backgroundColor: c.primarySoft }]}>
+            <Text style={[styles.roleBadgeText, { color: c.accentGlyph }]}>{t.workerRole}</Text>
+          </View>
         </View>
 
-        {/* Info rows */}
-        <View style={styles.infoCard}>
-          <InfoRow label={t.email} value={email} ltrValue />
-          <View style={styles.divider} />
-          <InfoRow label={t.phone} value={profile?.phone ?? t.noPhone} ltrValue={!!profile?.phone} />
+        {/* Info card */}
+        <View style={[styles.infoCard, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+          <InfoRow
+            icon="mail-outline"
+            label={t.email}
+            value={email}
+            ltr
+            c={c}
+          />
+          <View style={[styles.divider, { backgroundColor: c.border }]} />
+          <InfoRow
+            icon="call-outline"
+            label={t.phone}
+            value={profile?.phone ?? t.noPhone}
+            ltr={!!profile?.phone}
+            c={c}
+          />
         </View>
 
-        <TouchableOpacity style={styles.signOutBtn} onPress={signOut} activeOpacity={0.8}>
-          <Text style={styles.signOutText}>{t.signOut}</Text>
+        {/* Sign out */}
+        <TouchableOpacity
+          style={[styles.signOutBtn, { backgroundColor: c.redSoft }]}
+          onPress={signOut}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.signOutText, { color: c.red }]}>{t.signOut}</Text>
         </TouchableOpacity>
 
-      </View>
+      </ScrollView>
     </ScreenWrapper>
   );
 }
 
-function InfoRow({ label, value, ltrValue }) {
+function InfoRow({ icon, label, value, ltr, c }) {
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={[styles.infoValue, ltrValue && styles.infoValueLTR]}>{value}</Text>
+      <View style={[styles.iconDisc, { backgroundColor: c.primarySoft }]}>
+        <Ionicons name={icon} size={18} color={c.accentGlyph} />
+      </View>
+      <View style={styles.infoText}>
+        <Text style={[styles.infoLabel, { color: c.textMuted }]}>{label}</Text>
+        <Text style={[styles.infoValue, { color: c.text }, ltr && styles.ltr]}>{value}</Text>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20 },
+  container: { paddingHorizontal: 22, paddingBottom: 48 },
 
-  avatarWrap: { alignItems: 'center', marginTop: 24, marginBottom: 32 },
+  heroBlock: { alignItems: 'center', marginTop: 32, marginBottom: 28 },
   avatar: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#27ae60',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14,
-    shadowColor: '#27ae60',
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
+    width: 84, height: 84, borderRadius: 42,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 14,
   },
-  avatarText: { color: '#fff', fontSize: 36, fontWeight: '700' },
-  name: { fontSize: 24, fontWeight: '700', color: '#1a1a2e', marginBottom: 4 },
-  role: { fontSize: 15, color: '#27ae60', fontWeight: '600' },
+  avatarText: { fontSize: 34, fontWeight: '800' },
+  name: { fontSize: 22, fontWeight: '800', marginBottom: 8 },
+  roleBadge: { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 5 },
+  roleBadgeText: { fontSize: 13, fontWeight: '700' },
 
   infoCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 32,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 16, borderWidth: 1, marginBottom: 32, overflow: 'hidden',
   },
   infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14, gap: 12,
   },
-  infoLabel: { fontSize: 14, fontWeight: '600', color: '#9CA3AF' },
-  infoValue: { fontSize: 15, fontWeight: '500', color: '#1a1a2e', textAlign: rtl ? 'right' : 'left' },
-  infoValueLTR: { textAlign: 'left' },
-  divider: { height: 1, backgroundColor: '#F4F6F9', marginHorizontal: 20 },
+  iconDisc: {
+    width: 40, height: 40, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  infoText: { flex: 1 },
+  infoLabel: { fontSize: 12, fontWeight: '600' },
+  infoValue: { fontSize: 15, fontWeight: '700', marginTop: 1 },
+  ltr: { textAlign: 'left', writingDirection: 'ltr' },
+  divider: { height: 1, marginHorizontal: 16 },
 
   signOutBtn: {
-    backgroundColor: '#e74c3c',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 32,
+    borderRadius: 12, paddingVertical: 15, alignItems: 'center',
   },
-  signOutText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  signOutText: { fontSize: 17, fontWeight: '700' },
 });

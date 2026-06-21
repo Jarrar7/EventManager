@@ -7,6 +7,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
+import { useTheme } from '../../../context/ThemeContext';
+import { cardShadow } from '../../../theme/shadows';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import OfflineBanner from '../../../components/OfflineBanner';
 import { t } from '../../../i18n/he';
@@ -24,6 +26,8 @@ async function fetchStaff() {
 }
 
 export default function StaffListScreen({ navigation }) {
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
   const [search, setSearch] = useState('');
   const queryClient = useQueryClient();
 
@@ -45,7 +49,6 @@ export default function StaffListScreen({ navigation }) {
     onError: (error) => Alert.alert(t.error, error.message),
   });
 
-  // Clear search when leaving the screen — no data refetch needed here
   useFocusEffect(
     useCallback(() => {
       return () => setSearch('');
@@ -53,20 +56,13 @@ export default function StaffListScreen({ navigation }) {
   );
 
   function deleteWorker(id, name) {
-    Alert.alert(
-      t.removeWorker,
-      t.removeWorkerConfirm(name),
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: t.remove, style: 'destructive',
-          onPress: () => deleteMutation.mutate(id),
-        },
-      ]
-    );
+    Alert.alert(t.removeWorker, t.removeWorkerConfirm(name), [
+      { text: t.cancel, style: 'cancel' },
+      { text: t.remove, style: 'destructive', onPress: () => deleteMutation.mutate(id) },
+    ]);
   }
 
-  const q = search.trim().toLowerCase();
+  const q       = search.trim().toLowerCase();
   const qDigits = q.replace(/\D/g, '');
   const filtered = q
     ? workers.filter(w =>
@@ -77,8 +73,8 @@ export default function StaffListScreen({ navigation }) {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#5B6EF5" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
       </View>
     );
   }
@@ -87,26 +83,34 @@ export default function StaffListScreen({ navigation }) {
     <ScreenWrapper>
       <OfflineBanner />
 
+      {/* Title + add button */}
       <View style={styles.headerRow}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>{t.staff}</Text>
-          {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+          <Text style={[styles.title, { color: c.text }]}>{t.staff}</Text>
+          {isFetching && (
+            <ActivityIndicator size="small" color={c.textMuted} style={{ marginStart: 8 }} />
+          )}
         </View>
         <TouchableOpacity
-          style={styles.addBtn}
+          style={[styles.addBtn, { backgroundColor: c.primary }]}
           onPress={() => navigation.navigate('AddWorker')}
           activeOpacity={0.8}
         >
-          <Text style={styles.addBtnText}>{t.addWorker}</Text>
+          <Text style={[styles.addBtnText, { color: c.onPrimary }]}>{t.addWorker}</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchRow}>
-        <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
+      {/* Search */}
+      <View style={[
+        styles.searchRow,
+        { backgroundColor: c.card, borderColor: c.border },
+        shadow,
+      ]}>
+        <Ionicons name="search-outline" size={18} color={c.textMuted} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: c.text }]}
           placeholder="חפש עובד..."
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={c.textMuted}
           value={search}
           onChangeText={setSearch}
           returnKeyType="search"
@@ -120,13 +124,13 @@ export default function StaffListScreen({ navigation }) {
           {workers.length === 0 ? (
             <>
               <Text style={styles.emptyIcon}>👥</Text>
-              <Text style={styles.emptyText}>{t.noWorkersYet}</Text>
-              <Text style={styles.emptySubtext}>{t.tapToAddWorker}</Text>
+              <Text style={[styles.emptyText, { color: c.text }]}>{t.noWorkersYet}</Text>
+              <Text style={[styles.emptySubtext, { color: c.textMuted }]}>{t.tapToAddWorker}</Text>
             </>
           ) : (
             <>
               <Text style={styles.emptyIcon}>🔍</Text>
-              <Text style={styles.emptyText}>לא נמצאו עובדים</Text>
+              <Text style={[styles.emptyText, { color: c.text }]}>לא נמצאו עובדים</Text>
             </>
           )}
         </View>
@@ -136,35 +140,41 @@ export default function StaffListScreen({ navigation }) {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: 24 }}
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
               <TouchableOpacity
                 style={styles.cardMain}
                 onPress={() => navigation.navigate('EditWorker', { worker: item })}
                 activeOpacity={0.7}
               >
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+                <View style={[styles.avatar, { backgroundColor: c.primarySoft }]}>
+                  <Text style={[styles.avatarText, { color: c.accentGlyph }]}>
+                    {item.name.charAt(0).toUpperCase()}
+                  </Text>
                 </View>
-                <View>
-                  <Text style={styles.workerName}>{item.name}</Text>
-                  <Text style={styles.workerPhone}>{item.phone || t.noPhone}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.workerName, { color: c.text }]}>{item.name}</Text>
+                  <Text style={[styles.workerPhone, { color: c.textMuted }]}>
+                    {item.phone || t.noPhone}
+                  </Text>
                 </View>
               </TouchableOpacity>
+
               {item.phone ? (
                 <TouchableOpacity
-                  style={styles.callBtn}
+                  style={[styles.callBtn, { backgroundColor: c.greenSoft }]}
                   onPress={() => Linking.openURL('tel:' + item.phone)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="call-outline" size={20} color="#10B981" />
+                  <Ionicons name="call-outline" size={20} color={c.green} />
                 </TouchableOpacity>
               ) : null}
+
               <TouchableOpacity
-                style={styles.deleteBtn}
+                style={[styles.deleteBtn, { backgroundColor: c.redSoft }]}
                 onPress={() => deleteWorker(item.id, item.name)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.deleteBtnText}>✕</Text>
+                <Text style={[styles.deleteBtnText, { color: c.red }]}>✕</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -175,93 +185,50 @@ export default function StaffListScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
   headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 12,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 22, marginTop: 8, marginBottom: 12,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center' },
-  title: { fontSize: 26, fontWeight: '700', color: '#1a1a2e' },
-  addBtn: {
-    backgroundColor: '#5B6EF5',
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  title: { fontSize: 25, fontWeight: '800' },
+  addBtn: { borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10 },
+  addBtnText: { fontWeight: '700', fontSize: 15 },
 
   searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    height: 44,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 12, borderWidth: 1,
+    marginHorizontal: 22, marginBottom: 16,
+    paddingHorizontal: 12, height: 44,
   },
   searchIcon: { marginEnd: 8 },
-  searchInput: { flex: 1, fontSize: 15, color: '#1a1a2e' },
+  searchInput: { flex: 1, fontSize: 15 },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyIcon: { fontSize: 56, marginBottom: 12 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#374151' },
-  emptySubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 4 },
+  emptyText: { fontSize: 18, fontWeight: '600' },
+  emptySubtext: { fontSize: 14, marginTop: 4 },
 
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    marginHorizontal: 20,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 16, borderWidth: 1, padding: 14,
+    flexDirection: 'row', alignItems: 'center',
+    marginBottom: 12, marginHorizontal: 22,
   },
   cardMain: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   avatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#5B6EF5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginEnd: 14,
+    width: 46, height: 46, borderRadius: 23,
+    justifyContent: 'center', alignItems: 'center', marginEnd: 14,
   },
-  avatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  workerName: { fontSize: 17, fontWeight: '600', color: '#1a1a2e' },
-  workerPhone: { fontSize: 14, color: '#9CA3AF', marginTop: 2 },
+  avatarText: { fontSize: 20, fontWeight: '700' },
+  workerName: { fontSize: 16, fontWeight: '700' },
+  workerPhone: { fontSize: 14, marginTop: 2 },
 
   callBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ECFDF5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginEnd: 8,
+    width: 42, height: 42, borderRadius: 21,
+    justifyContent: 'center', alignItems: 'center', marginEnd: 8,
   },
   deleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 34, height: 34, borderRadius: 17,
+    justifyContent: 'center', alignItems: 'center',
   },
-  deleteBtnText: { fontSize: 14, color: '#e74c3c', fontWeight: '700' },
+  deleteBtnText: { fontSize: 14, fontWeight: '700' },
 });

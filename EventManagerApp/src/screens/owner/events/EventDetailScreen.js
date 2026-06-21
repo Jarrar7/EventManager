@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
+import { useTheme } from '../../../context/ThemeContext';
+import { cardShadow } from '../../../theme/shadows';
 import ScreenWrapper from '../../../components/ScreenWrapper';
 import Toast, { useToast } from '../../../components/Toast';
 import { t } from '../../../i18n/he';
@@ -27,7 +29,7 @@ async function fetchEventDetail(eventId) {
   ]);
   if (eventRes.error) throw eventRes.error;
   return {
-    event:      eventRes.data,
+    event:       eventRes.data,
     assignments: assignRes.data || [],
     allWorkers:  workersRes.data || [],
   };
@@ -35,14 +37,14 @@ async function fetchEventDetail(eventId) {
 
 export default function EventDetailScreen({ route, navigation }) {
   const { eventId } = route.params;
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
   const queryClient = useQueryClient();
   const { showToast, toastMessage, toastOpacity } = useToast();
 
-  // Local UI state — not server state
   const [showAddWorker, setShowAddWorker] = useState(false);
-  const [payInputs, setPayInputs] = useState({});
-  // payKeys forces TextInput remount to revert invalid entries
-  const [payKeys, setPayKeys] = useState({});
+  const [payInputs, setPayInputs]         = useState({});
+  const [payKeys, setPayKeys]             = useState({});
 
   const { data, isLoading } = useQuery({
     queryKey: ['event-detail', eventId],
@@ -53,35 +55,26 @@ export default function EventDetailScreen({ route, navigation }) {
   const assignments = data?.assignments ?? [];
   const allWorkers  = data?.allWorkers  ?? [];
 
-  const assignedIds      = assignments.map(a => a.worker_id);
+  const assignedIds       = assignments.map(a => a.worker_id);
   const unassignedWorkers = allWorkers.filter(w => !assignedIds.includes(w.id));
-
-  // Helpers that invalidate related caches after each mutation -----------------
 
   function invalidateDetail() {
     queryClient.invalidateQueries({ queryKey: ['event-detail', eventId] });
   }
-
   function invalidateListsAndDash() {
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   }
-
   function invalidatePayments() {
     queryClient.invalidateQueries({ queryKey: ['payments'] });
     queryClient.invalidateQueries({ queryKey: ['worker-payments'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
   }
 
-  // ---------------------------------------------------------------------------
-
   async function assignWorker(worker) {
     const pay = parseFloat(payInputs[worker.id] || '0') || 0;
     const { error } = await supabase.from('event_workers').insert({
-      event_id:  eventId,
-      worker_id: worker.id,
-      pay_amount: pay,
-      is_paid: false,
+      event_id: eventId, worker_id: worker.id, pay_amount: pay, is_paid: false,
     });
     if (error) { Alert.alert(t.error, error.message); return; }
     setPayInputs(prev => { const n = { ...prev }; delete n[worker.id]; return n; });
@@ -90,60 +83,47 @@ export default function EventDetailScreen({ route, navigation }) {
   }
 
   async function removeAssignment(assignmentId, workerName) {
-    Alert.alert(
-      t.removeFromEvent,
-      t.removeFromEventConfirm(workerName),
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: t.remove, style: 'destructive',
-          onPress: async () => {
-            await supabase.from('event_workers').delete().eq('id', assignmentId);
-            invalidateDetail();
-            queryClient.invalidateQueries({ queryKey: ['payments'] });
-          },
+    Alert.alert(t.removeFromEvent, t.removeFromEventConfirm(workerName), [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.remove, style: 'destructive',
+        onPress: async () => {
+          await supabase.from('event_workers').delete().eq('id', assignmentId);
+          invalidateDetail();
+          queryClient.invalidateQueries({ queryKey: ['payments'] });
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function toggleStatus() {
     const newStatus = event.status === 'upcoming' ? 'done' : 'upcoming';
     const { error } = await supabase.from('events').update({ status: newStatus }).eq('id', eventId);
-    if (!error) {
-      invalidateDetail();
-      invalidateListsAndDash();
-    }
+    if (!error) { invalidateDetail(); invalidateListsAndDash(); }
   }
 
   async function markAsPaid(assignment) {
-    Alert.alert(
-      'סימון תשלום',
-      `לסמן את ${assignment.users?.name} כשלום עבור ${event?.title}?`,
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: 'אישור',
-          onPress: async () => {
-            const now = new Date().toISOString();
-            const { error } = await supabase
-              .from('event_workers')
-              .update({ is_paid: true, paid_at: now })
-              .eq('id', assignment.id);
-            if (error) { Alert.alert(t.error, error.message); return; }
-            invalidateDetail();
-            invalidatePayments();
-            showToast('סומן כשלום ✓');
-          },
+    Alert.alert('סימון תשלום', `לסמן את ${assignment.users?.name} כשלום עבור ${event?.title}?`, [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: 'אישור',
+        onPress: async () => {
+          const now = new Date().toISOString();
+          const { error } = await supabase
+            .from('event_workers')
+            .update({ is_paid: true, paid_at: now })
+            .eq('id', assignment.id);
+          if (error) { Alert.alert(t.error, error.message); return; }
+          invalidateDetail(); invalidatePayments();
+          showToast('סומן כשלום ✓');
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function updatePay(assignmentId, newPay) {
     const pay = parseFloat(newPay);
     if (!pay || pay <= 0) {
-      // Revert the TextInput by bumping its key — forces remount with original defaultValue
       setPayKeys(prev => ({ ...prev, [assignmentId]: (prev[assignmentId] || 0) + 1 }));
       return;
     }
@@ -154,429 +134,393 @@ export default function EventDetailScreen({ route, navigation }) {
 
   async function markAllPaid() {
     const unpaid = assignments.filter(a => !a.is_paid);
-    Alert.alert(
-      'סימון תשלום קבוצתי',
-      `לסמן את כל העובדים באירוע זה כשלום? (${unpaid.length} עובדים)`,
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: 'אישור',
-          onPress: async () => {
-            const now = new Date().toISOString();
-            const { error } = await supabase
-              .from('event_workers')
-              .update({ is_paid: true, paid_at: now })
-              .eq('event_id', eventId)
-              .eq('is_paid', false);
-            if (error) { Alert.alert(t.error, error.message); return; }
-            invalidateDetail();
-            invalidatePayments();
-            showToast('כל העובדים סומנו כשלום ✓');
-          },
+    Alert.alert('סימון תשלום קבוצתי', `לסמן את כל העובדים באירוע זה כשלום? (${unpaid.length} עובדים)`, [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: 'אישור',
+        onPress: async () => {
+          const now = new Date().toISOString();
+          const { error } = await supabase
+            .from('event_workers')
+            .update({ is_paid: true, paid_at: now })
+            .eq('event_id', eventId)
+            .eq('is_paid', false);
+          if (error) { Alert.alert(t.error, error.message); return; }
+          invalidateDetail(); invalidatePayments();
+          showToast('כל העובדים סומנו כשלום ✓');
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function duplicateEvent() {
-    Alert.alert(
-      'שכפול אירוע',
-      `לשכפל את האירוע "${event?.title}"?`,
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: 'שכפל',
-          onPress: async () => {
-            const { data: newEvent, error } = await supabase
-              .from('events')
-              .insert({
-                title:      event.title,
-                date:       new Date().toISOString(),
-                time:       event.time   || null,
-                venue:      event.venue  || null,
-                notes:      event.notes  || null,
-                status:     'upcoming',
-                created_by: event.created_by,
-              })
-              .select()
-              .single();
-            if (error) { Alert.alert(t.error, error.message); return; }
-            invalidateListsAndDash();
-            showToast('האירוע שוכפל בהצלחה ✓');
-            setTimeout(() => navigation.replace('EventDetail', { eventId: newEvent.id }), 800);
-          },
+    Alert.alert('שכפול אירוע', `לשכפל את האירוע "${event?.title}"?`, [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: 'שכפל',
+        onPress: async () => {
+          const { data: newEvent, error } = await supabase
+            .from('events')
+            .insert({
+              title: event.title, date: new Date().toISOString(),
+              time: event.time || null, venue: event.venue || null,
+              notes: event.notes || null, status: 'upcoming',
+              created_by: event.created_by,
+            })
+            .select().single();
+          if (error) { Alert.alert(t.error, error.message); return; }
+          invalidateListsAndDash();
+          showToast('האירוע שוכפל בהצלחה ✓');
+          setTimeout(() => navigation.replace('EventDetail', { eventId: newEvent.id }), 800);
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function deleteEvent() {
-    Alert.alert(
-      t.deleteEvent,
-      t.deleteEventConfirm(event?.title),
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: t.remove, style: 'destructive',
-          onPress: async () => {
-            await supabase.from('events').delete().eq('id', eventId);
-            invalidateListsAndDash();
-            navigation.navigate('EventsList');
-          },
+    Alert.alert(t.deleteEvent, t.deleteEventConfirm(event?.title), [
+      { text: t.cancel, style: 'cancel' },
+      {
+        text: t.remove, style: 'destructive',
+        onPress: async () => {
+          await supabase.from('events').delete().eq('id', eventId);
+          invalidateListsAndDash();
+          navigation.navigate('EventsList');
         },
-      ]
-    );
+      },
+    ]);
   }
 
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#5B6EF5" /></View>;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
   }
 
   const isDone = event?.status === 'done';
 
+  // Payment summary across all workers
+  const totalPay  = assignments.reduce((s, a) => s + (a.pay_amount || 0), 0);
+  const paidPay   = assignments.filter(a => a.is_paid).reduce((s, a) => s + (a.pay_amount || 0), 0);
+  const remaining = totalPay - paidPay;
+
+  const unpaidCount = assignments.filter(a => !a.is_paid).length;
+
   return (
     <ScreenWrapper>
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-
-      {/* Top row: back button + action buttons */}
-      <View style={styles.topRow}>
-        <TouchableOpacity onPress={() => navigation.navigate('EventsList')} style={styles.backBtn}>
-          <Text style={styles.backText}>{rtl ? `${t.back} →` : `← ${t.back}`}</Text>
-        </TouchableOpacity>
-        <View style={styles.topActions}>
-          <TouchableOpacity
-            onPress={duplicateEvent}
-            style={styles.duplicateBtn}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.duplicateBtnText}>⎘ שכפל</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('EditEvent', { event })}
-            style={styles.editBtn}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.editBtnText}>✏️ {t.editEvent}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <Text style={styles.eventTitle}>{event?.title}</Text>
-
-      <Text style={styles.eventDate}>
-        📅 {formatDate(event?.date)}{event?.time ? `  🕐 ${event.time}` : ''}
-      </Text>
-
-      {event?.venue ? <Text style={styles.eventVenue}>📍 {event.venue}</Text> : null}
-      {event?.notes ? <Text style={styles.eventNotes}>{event.notes}</Text> : null}
-
-      {/* Status toggle */}
-      <TouchableOpacity
-        style={[styles.statusBtn, isDone ? styles.statusDone : styles.statusUpcoming]}
-        onPress={toggleStatus}
-        activeOpacity={0.8}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.container, { paddingBottom: 48 }]}
       >
-        <Text style={[styles.statusBtnText, isDone ? styles.statusBtnTextDone : styles.statusBtnTextUpcoming]}>
-          {isDone ? t.statusDone : t.statusUpcoming}
-        </Text>
-      </TouchableOpacity>
+        {/* Back link */}
+        <TouchableOpacity onPress={() => navigation.navigate('EventsList')} style={styles.backLink}>
+          <Text style={[styles.backLinkText, { color: c.primary }]}>
+            {rtl ? `${t.back} →` : `← ${t.back}`}
+          </Text>
+        </TouchableOpacity>
 
-      <Text style={styles.sectionTitle}>{t.workersCount(assignments.length)}</Text>
-
-      {assignments.length === 0 ? (
-        <Text style={styles.emptyNote}>{t.noWorkersAssigned}</Text>
-      ) : (
-        assignments.map(a => (
-          <View key={a.id} style={styles.workerCard}>
-            <View style={styles.workerInfo}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{a.users?.name?.charAt(0).toUpperCase()}</Text>
-              </View>
-              <View>
-                <Text style={styles.workerName}>{a.users?.name}</Text>
-                <Text style={[styles.paidBadge, a.is_paid ? styles.paid : styles.unpaid]}>
-                  {a.is_paid ? t.paid : t.unpaid}
-                </Text>
-              </View>
+        {/* Detail card */}
+        <View style={[styles.detailCard, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+          {/* Top row: emoji disc + action buttons */}
+          <View style={styles.detailCardTop}>
+            <View style={[styles.emojiDisc, { backgroundColor: c.emojiBg }]}>
+              <Text style={{ fontSize: 28 }}>🎪</Text>
             </View>
-            <View style={styles.workerActions}>
-              <View style={styles.payRow}>
-                <Text style={styles.payLabel}>₪</Text>
-                <TextInput
-                  key={`${a.id}-${payKeys[a.id] || 0}`}
-                  style={styles.payInput}
-                  defaultValue={String(a.pay_amount)}
-                  keyboardType="numeric"
-                  onEndEditing={e => updatePay(a.id, e.nativeEvent.text)}
-                  selectTextOnFocus
-                  textAlign="center"
-                />
-              </View>
-              {a.is_paid ? (
-                <View style={styles.paidLabel}>
-                  <Text style={styles.paidLabelText}>שולם ✓</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.markPaidBtn}
-                  onPress={() => markAsPaid(a)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.markPaidBtnText}>סמן כשלום ✓</Text>
-                </TouchableOpacity>
-              )}
+            <View style={styles.detailCardActions}>
               <TouchableOpacity
-                style={styles.removeBtn}
-                onPress={() => removeAssignment(a.id, a.users?.name)}
+                onPress={duplicateEvent}
+                style={[styles.actionBtn, { backgroundColor: c.greenSoft }]}
+                activeOpacity={0.7}
               >
-                <Text style={styles.removeBtnText}>✕</Text>
+                <Text style={[styles.actionBtnText, { color: c.green }]}>⎘ שכפל</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('EditEvent', { event })}
+                style={[styles.actionBtn, { backgroundColor: c.primarySoft }]}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.actionBtnText, { color: c.accentGlyph }]}>✏️ {t.editEvent}</Text>
               </TouchableOpacity>
             </View>
           </View>
-        ))
-      )}
 
-      {assignments.filter(a => !a.is_paid).length >= 2 && (
+          <Text style={[styles.detailTitle, { color: c.text }]}>{event?.title}</Text>
+
+          <View style={styles.metaRow}>
+            <Text style={[styles.metaIcon, { color: c.primary }]}>📅</Text>
+            <Text style={[styles.metaText, { color: c.text }]}>
+              {formatDate(event?.date)}{event?.time ? `  🕐 ${event.time}` : ''}
+            </Text>
+          </View>
+          {event?.venue ? (
+            <View style={styles.metaRow}>
+              <Text style={[styles.metaIcon, { color: c.primary }]}>📍</Text>
+              <Text style={[styles.metaText, { color: c.text }]}>{event.venue}</Text>
+            </View>
+          ) : null}
+          {event?.notes ? (
+            <Text style={[styles.notesText, { color: c.textMuted }]}>{event.notes}</Text>
+          ) : null}
+        </View>
+
+        {/* Status toggle */}
         <TouchableOpacity
-          style={styles.bulkPayBtn}
-          onPress={markAllPaid}
+          style={[
+            styles.statusBtn,
+            isDone
+              ? { backgroundColor: c.green }
+              : { backgroundColor: c.card, borderWidth: 1.5, borderColor: c.border },
+          ]}
+          onPress={toggleStatus}
           activeOpacity={0.8}
         >
-          <Text style={styles.bulkPayBtnText}>סמן את כולם כשלום ✓</Text>
+          <Text style={[styles.statusBtnText, { color: isDone ? '#fff' : c.textMuted }]}>
+            {isDone ? t.statusDone : t.statusUpcoming}
+          </Text>
         </TouchableOpacity>
-      )}
 
-      {unassignedWorkers.length > 0 && (
-        <>
-          <TouchableOpacity
-            style={styles.addWorkerToggle}
-            onPress={() => setShowAddWorker(prev => !prev)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.addWorkerToggleText}>
-              {showAddWorker ? t.hideWorkerList : t.assignWorker}
-            </Text>
-          </TouchableOpacity>
+        {/* 3-up payment summary */}
+        {assignments.length > 0 && (
+          <View style={[styles.paymentSummary, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+            <View style={styles.paymentSummaryCell}>
+              <Text style={[styles.paymentSummaryValue, { color: c.text }]}>₪{totalPay.toFixed(0)}</Text>
+              <Text style={[styles.paymentSummaryLabel, { color: c.textMuted }]}>סה״כ</Text>
+            </View>
+            <View style={[styles.paymentSummaryDivider, { backgroundColor: c.border }]} />
+            <View style={styles.paymentSummaryCell}>
+              <Text style={[styles.paymentSummaryValue, { color: c.green }]}>₪{paidPay.toFixed(0)}</Text>
+              <Text style={[styles.paymentSummaryLabel, { color: c.textMuted }]}>שולם</Text>
+            </View>
+            <View style={[styles.paymentSummaryDivider, { backgroundColor: c.border }]} />
+            <View style={styles.paymentSummaryCell}>
+              <Text style={[styles.paymentSummaryValue, { color: c.red }]}>₪{remaining.toFixed(0)}</Text>
+              <Text style={[styles.paymentSummaryLabel, { color: c.textMuted }]}>נותר</Text>
+            </View>
+          </View>
+        )}
 
-          {showAddWorker && unassignedWorkers.map(w => (
-            <View key={w.id} style={styles.unassignedCard}>
-              <Text style={styles.unassignedName}>{w.name}</Text>
-              <View style={styles.assignRow}>
+        {/* Workers section header */}
+        <Text style={[styles.sectionTitle, { color: c.text }]}>{t.workersCount(assignments.length)}</Text>
+
+        {assignments.length === 0 ? (
+          <Text style={[styles.emptyNote, { color: c.textMuted }]}>{t.noWorkersAssigned}</Text>
+        ) : (
+          assignments.map(a => (
+            <View key={a.id} style={[styles.workerCard, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+              <View style={[styles.workerAvatar, { backgroundColor: c.primarySoft }]}>
+                <Text style={[styles.workerAvatarText, { color: c.accentGlyph }]}>
+                  {a.users?.name?.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.workerName, { color: c.text }]}>{a.users?.name}</Text>
+                <Text style={[styles.workerStatus, { color: a.is_paid ? c.green : c.red }]}>
+                  {a.is_paid ? '✓ שולם' : '● ממתין'}
+                </Text>
+              </View>
+              <View style={styles.workerTrailing}>
                 <View style={styles.payRow}>
-                  <Text style={styles.payLabel}>₪</Text>
+                  <Text style={[styles.payLabel, { color: c.text }]}>₪</Text>
                   <TextInput
-                    style={styles.payInput}
-                    placeholder="0"
-                    placeholderTextColor="#9CA3AF"
+                    key={`${a.id}-${payKeys[a.id] || 0}`}
+                    style={[styles.payInput, { backgroundColor: c.background, color: c.text }]}
+                    defaultValue={String(a.pay_amount)}
                     keyboardType="numeric"
-                    value={payInputs[w.id] || ''}
-                    onChangeText={val => setPayInputs(prev => ({ ...prev, [w.id]: val }))}
+                    onEndEditing={e => updatePay(a.id, e.nativeEvent.text)}
+                    selectTextOnFocus
                     textAlign="center"
                   />
                 </View>
+                {a.is_paid ? (
+                  <View style={[styles.paidPill, { backgroundColor: c.greenSoft }]}>
+                    <Text style={[styles.paidPillText, { color: c.green }]}>שולם ✓</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.markPaidBtn, { backgroundColor: c.green }]}
+                    onPress={() => markAsPaid(a)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.markPaidBtnText}>סמן כשלום ✓</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                  style={styles.assignBtn}
-                  onPress={() => assignWorker(w)}
-                  activeOpacity={0.8}
+                  style={[styles.removeBtn, { backgroundColor: c.redSoft }]}
+                  onPress={() => removeAssignment(a.id, a.users?.name)}
                 >
-                  <Text style={styles.assignBtnText}>{t.assign}</Text>
+                  <Text style={[styles.removeBtnText, { color: c.red }]}>✕</Text>
                 </TouchableOpacity>
               </View>
             </View>
-          ))}
-        </>
-      )}
+          ))
+        )}
 
-      <TouchableOpacity style={styles.deleteBtn} onPress={deleteEvent} activeOpacity={0.8}>
-        <Text style={styles.deleteBtnText}>{t.deleteEvent}</Text>
-      </TouchableOpacity>
+        {/* Bulk pay */}
+        {unpaidCount >= 2 && (
+          <TouchableOpacity
+            style={[styles.bulkPayBtn, { backgroundColor: c.green }]}
+            onPress={markAllPaid}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.bulkPayBtnText}>סמן את כולם כשולם ✓</Text>
+          </TouchableOpacity>
+        )}
 
-    </ScrollView>
-    <Toast message={toastMessage} opacity={toastOpacity} />
+        {/* Assign worker */}
+        {unassignedWorkers.length > 0 && (
+          <>
+            <TouchableOpacity
+              style={[styles.ghostBtn, { borderColor: c.primary }]}
+              onPress={() => setShowAddWorker(prev => !prev)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.ghostBtnText, { color: c.primary }]}>
+                {showAddWorker ? t.hideWorkerList : t.assignWorker}
+              </Text>
+            </TouchableOpacity>
+
+            {showAddWorker && unassignedWorkers.map(w => (
+              <View key={w.id} style={[styles.unassignedCard, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+                <Text style={[styles.unassignedName, { color: c.text }]}>{w.name}</Text>
+                <View style={styles.assignRow}>
+                  <View style={styles.payRow}>
+                    <Text style={[styles.payLabel, { color: c.text }]}>₪</Text>
+                    <TextInput
+                      style={[styles.payInput, { backgroundColor: c.background, color: c.text }]}
+                      placeholder="0"
+                      placeholderTextColor={c.textMuted}
+                      keyboardType="numeric"
+                      value={payInputs[w.id] || ''}
+                      onChangeText={val => setPayInputs(prev => ({ ...prev, [w.id]: val }))}
+                      textAlign="center"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.assignBtn, { backgroundColor: c.green }]}
+                    onPress={() => assignWorker(w)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.assignBtnText}>{t.assign}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+
+        {/* Delete */}
+        <TouchableOpacity
+          style={[styles.deleteBtn, { borderColor: c.red }]}
+          onPress={deleteEvent}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.deleteBtnText, { color: c.red }]}>{t.deleteEvent}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      <Toast message={toastMessage} opacity={toastOpacity} />
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1 },
-  container: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 40 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { paddingHorizontal: 22, paddingTop: 8 },
 
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  backBtn: {},
-  backText: { fontSize: 16, color: '#5B6EF5', fontWeight: '600' },
-  topActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  duplicateBtn: {
-    backgroundColor: '#F0FDF4',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  duplicateBtnText: { fontSize: 14, color: '#10B981', fontWeight: '700' },
-  editBtn: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  editBtnText: { fontSize: 14, color: '#5B6EF5', fontWeight: '700' },
+  backLink: { marginBottom: 14 },
+  backLinkText: { fontSize: 15, fontWeight: '600' },
 
-  eventTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#1a1a2e',
-    marginBottom: 8,
-    textAlign: rtl ? 'right' : 'left',
+  detailCard: {
+    borderRadius: 16, borderWidth: 1,
+    padding: 18, marginBottom: 14,
   },
-  eventDate: { fontSize: 15, color: '#6B7280', marginBottom: 4, textAlign: rtl ? 'right' : 'left' },
-  eventVenue: { fontSize: 15, color: '#6B7280', marginBottom: 4, textAlign: rtl ? 'right' : 'left' },
-  eventNotes: {
-    fontSize: 14, color: '#9CA3AF', marginTop: 4, marginBottom: 8,
-    fontStyle: 'italic', textAlign: rtl ? 'right' : 'left',
+  detailCardTop: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    justifyContent: 'space-between', marginBottom: 14,
   },
+  emojiDisc: {
+    width: 56, height: 56, borderRadius: 14,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  detailCardActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  actionBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  actionBtnText: { fontSize: 14, fontWeight: '700' },
+
+  detailTitle: { fontSize: 24, fontWeight: '800', marginBottom: 12, textAlign: rtl ? 'right' : 'left' },
+  metaRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6, gap: 6 },
+  metaIcon: { fontSize: 14, marginTop: 1 },
+  metaText: { fontSize: 14, fontWeight: '600', flex: 1, textAlign: rtl ? 'right' : 'left' },
+  notesText: { fontSize: 14, fontStyle: 'italic', marginTop: 6, textAlign: rtl ? 'right' : 'left' },
 
   statusBtn: {
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginVertical: 16,
-  },
-  statusUpcoming: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#D1D5DB',
-  },
-  statusDone: {
-    backgroundColor: '#10B981',
+    borderRadius: 14, paddingVertical: 14, alignItems: 'center', marginBottom: 16,
   },
   statusBtnText: { fontSize: 15, fontWeight: '700' },
-  statusBtnTextUpcoming: { color: '#6B7280' },
-  statusBtnTextDone: { color: '#fff' },
+
+  paymentSummary: {
+    borderRadius: 16, borderWidth: 1,
+    flexDirection: 'row', marginBottom: 20, overflow: 'hidden',
+  },
+  paymentSummaryCell: { flex: 1, alignItems: 'center', paddingVertical: 14 },
+  paymentSummaryDivider: { width: 1, marginVertical: 10 },
+  paymentSummaryValue: { fontSize: 18, fontWeight: '800' },
+  paymentSummaryLabel: { fontSize: 12, fontWeight: '600', marginTop: 3 },
 
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a2e',
-    marginBottom: 12,
+    fontSize: 18, fontWeight: '800', marginBottom: 12,
     textAlign: rtl ? 'right' : 'left',
   },
-  emptyNote: { fontSize: 14, color: '#9CA3AF', marginBottom: 16, textAlign: rtl ? 'right' : 'left' },
+  emptyNote: { fontSize: 14, marginBottom: 16, textAlign: rtl ? 'right' : 'left' },
 
   workerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 16, borderWidth: 1, padding: 14, marginBottom: 12,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
   },
-  workerInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  avatar: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: '#5B6EF5',
-    justifyContent: 'center', alignItems: 'center', marginEnd: 12,
+  workerAvatar: {
+    width: 46, height: 46, borderRadius: 23,
+    justifyContent: 'center', alignItems: 'center',
   },
-  avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  workerName: { fontSize: 16, fontWeight: '600', color: '#1a1a2e' },
-  paidBadge: { fontSize: 13, fontWeight: '600', marginTop: 2 },
-  paid: { color: '#10B981' },
-  unpaid: { color: '#e74c3c' },
-  workerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  workerAvatarText: { fontSize: 17, fontWeight: '800' },
+  workerName: { fontSize: 15, fontWeight: '700' },
+  workerStatus: { fontSize: 12.5, fontWeight: '700', marginTop: 2 },
+  workerTrailing: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   payRow: { flexDirection: 'row', alignItems: 'center' },
-  payLabel: { fontSize: 16, color: '#374151', marginEnd: 4 },
+  payLabel: { fontSize: 16, marginEnd: 2 },
   payInput: {
-    backgroundColor: '#F4F6F9',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 16,
-    width: 70,
-    textAlign: 'center',
-    color: '#1a1a2e',
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 5,
+    fontSize: 16, width: 66, textAlign: 'center',
   },
-  markPaidBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+  paidPill: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  paidPillText: { fontWeight: '700', fontSize: 13 },
+  markPaidBtn: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   markPaidBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  paidLabel: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  paidLabelText: { color: '#9CA3AF', fontWeight: '700', fontSize: 13 },
-  removeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeBtnText: { fontSize: 14, color: '#e74c3c', fontWeight: '700' },
+  removeBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  removeBtnText: { fontSize: 14, fontWeight: '700' },
 
   bulkPayBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    marginBottom: 12,
+    borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 12,
   },
   bulkPayBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
-  addWorkerToggle: {
-    backgroundColor: '#5B6EF5',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    marginVertical: 12,
+  ghostBtn: {
+    borderRadius: 14, borderWidth: 1.5, padding: 14,
+    alignItems: 'center', marginVertical: 12,
   },
-  addWorkerToggleText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  ghostBtnText: { fontWeight: '700', fontSize: 15 },
 
   unassignedCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12,
   },
   unassignedName: {
-    fontSize: 16, fontWeight: '600', color: '#1a1a2e', marginBottom: 10,
+    fontSize: 16, fontWeight: '600', marginBottom: 10,
     textAlign: rtl ? 'right' : 'left',
   },
   assignRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  assignBtn: {
-    backgroundColor: '#10B981',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-  },
+  assignBtn: { borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10 },
   assignBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 
   deleteBtn: {
-    borderWidth: 1.5,
-    borderColor: '#e74c3c',
-    borderRadius: 14,
-    padding: 14,
-    alignItems: 'center',
-    marginTop: 24,
+    borderWidth: 1.5, borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 24,
   },
-  deleteBtnText: { color: '#e74c3c', fontWeight: '700', fontSize: 15 },
+  deleteBtnText: { fontWeight: '700', fontSize: 15 },
 });

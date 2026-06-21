@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator, I18nManager,
+  View, Text, FlatList, StyleSheet, ActivityIndicator,
+  TouchableOpacity, I18nManager,
 } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
+import { cardShadow } from '../../theme/shadows';
 import ScreenWrapper from '../../components/ScreenWrapper';
 import OfflineBanner from '../../components/OfflineBanner';
 import { t } from '../../i18n/he';
@@ -16,12 +19,23 @@ function parseDate(dateStr) {
   return new Date(dateStr.length === 10 ? dateStr + 'T00:00:00' : dateStr);
 }
 
-function formatDate(dateStr) {
+function getDateParts(dateStr) {
   const d = parseDate(dateStr);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('he-IL', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
+  if (isNaN(d.getTime())) return { dd: '—', mm: '—' };
+  return {
+    dd: d.getDate().toString(),
+    mm: d.toLocaleDateString('he-IL', { month: 'short' }),
+  };
+}
+
+function formatMeta(dateStr, venue) {
+  const parts = [];
+  const d = parseDate(dateStr);
+  if (!isNaN(d.getTime())) {
+    parts.push(d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' }));
+  }
+  if (venue) parts.push(`📍 ${venue}`);
+  return parts.join('  ');
 }
 
 function daysUntil(dateStr) {
@@ -33,19 +47,13 @@ function daysUntil(dateStr) {
   return Math.round((eventDate - today) / (1000 * 60 * 60 * 24));
 }
 
-function DaysChip({ dateStr }) {
-  const days = daysUntil(dateStr);
-  if (days < 0) return null;
-  if (days === 0) return <Text style={styles.chipToday}>היום!</Text>;
-  if (days === 1) return <Text style={styles.chipSoon}>מחר</Text>;
-  if (days <= 7) return <Text style={styles.chipSoon}>בעוד {days} ימים</Text>;
-  return <Text style={styles.chipFuture}>בעוד {days} ימים</Text>;
-}
-
 export default function ShiftsScreen() {
   const { profile } = useAuth();
+  const { c, theme } = useTheme();
+  const shadow = theme === 'light' ? cardShadow : {};
+  const [filter, setFilter] = useState('upcoming');
 
-  const { data: shifts = [], isLoading, isFetching } = useQuery({
+  const { data: allShifts = [], isLoading, isFetching } = useQuery({
     queryKey: ['shifts', profile?.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -53,31 +61,63 @@ export default function ShiftsScreen() {
         .select('*, events(*)')
         .eq('worker_id', profile.id);
       if (error) throw error;
-      return (data || [])
-        .filter(r => r.events?.status === 'upcoming')
-        .sort((a, b) => parseDate(a.events.date) - parseDate(b.events.date));
+      return (data || []).sort((a, b) => parseDate(a.events?.date) - parseDate(b.events?.date));
     },
-    // Only runs once profile is loaded; profile?.id in key ensures re-query if profile changes
     enabled: !!profile?.id,
   });
 
+  const shifts = allShifts.filter(r => {
+    if (filter === 'all') return true;
+    return r.events?.status === filter;
+  });
+
+  const filters = [
+    { key: 'all',      label: t.filterAll },
+    { key: 'upcoming', label: t.filterUpcoming },
+    { key: 'done',     label: t.filterDone },
+  ];
+
   if (isLoading) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#27ae60" /></View>;
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background }}>
+        <ActivityIndicator size="large" color={c.primary} />
+      </View>
+    );
   }
 
   return (
     <ScreenWrapper>
       <OfflineBanner />
+
+      {/* Title + fetching indicator */}
       <View style={styles.titleRow}>
-        <Text style={styles.pageTitle}>{t.myShiftsTitle}</Text>
-        {isFetching && <ActivityIndicator size="small" color="#9CA3AF" style={{ marginStart: 8 }} />}
+        <Text style={[styles.pageTitle, { color: c.text }]}>{t.myShiftsTitle}</Text>
+        {isFetching && <ActivityIndicator size="small" color={c.textMuted} style={{ marginStart: 8 }} />}
+      </View>
+
+      {/* Filter pills */}
+      <View style={styles.filters}>
+        {filters.map(f => (
+          <TouchableOpacity
+            key={f.key}
+            style={[
+              styles.filterBtn,
+              { backgroundColor: filter === f.key ? c.primary : c.card, borderColor: c.border },
+            ]}
+            onPress={() => setFilter(f.key)}
+          >
+            <Text style={[styles.filterText, { color: filter === f.key ? c.onPrimary : c.textMuted }]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {shifts.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>📋</Text>
-          <Text style={styles.emptyText}>{t.noShifts}</Text>
-          <Text style={styles.emptySubtext}>{t.noShiftsSubtext}</Text>
+          <Text style={[styles.emptyText, { color: c.text }]}>{t.noShifts}</Text>
+          <Text style={[styles.emptySubtext, { color: c.textMuted }]}>{t.noShiftsSubtext}</Text>
         </View>
       ) : (
         <FlatList
@@ -85,91 +125,123 @@ export default function ShiftsScreen() {
           keyExtractor={item => item.id}
           style={{ flex: 1 }}
           contentContainerStyle={{ paddingBottom: 32 }}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <View style={styles.cardAccent} />
-              <View style={styles.cardBody}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.eventTitle} numberOfLines={1}>{item.events.title}</Text>
-                  <DaysChip dateStr={item.events.date} />
-                </View>
-                <Text style={styles.eventDate}>📅 {formatDate(item.events.date)}</Text>
-                {item.events.venue ? (
-                  <Text style={styles.eventVenue}>📍 {item.events.venue}</Text>
-                ) : null}
-                <View style={styles.payRow}>
-                  <Text style={styles.payLabel}>שכר: </Text>
-                  <Text style={styles.payAmount}>₪{(item.pay_amount || 0).toFixed(0)}</Text>
-                  <Text style={[styles.paidBadge, item.is_paid ? styles.paid : styles.unpaid]}>
-                    {item.is_paid ? t.paid : t.unpaid}
+          renderItem={({ item }) => {
+            const ev   = item.events;
+            const done = ev?.status === 'done';
+            const { dd, mm } = getDateParts(ev?.date);
+            const days = daysUntil(ev?.date);
+
+            return (
+              <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, shadow]}>
+                {/* Date chip */}
+                <View style={[styles.dateChip, { backgroundColor: done ? c.border : c.primarySoft }]}>
+                  <Text style={[styles.dateChipDd, { color: done ? c.textMuted : (theme === 'dark' ? c.accentGlyph : c.primary) }]}>
+                    {dd}
+                  </Text>
+                  <Text style={[styles.dateChipMm, { color: done ? c.textMuted : (theme === 'dark' ? c.accentGlyph : c.primary) }]}>
+                    {mm}
                   </Text>
                 </View>
+
+                {/* Body */}
+                <View style={styles.cardBody}>
+                  <Text style={[styles.eventTitle, { color: c.text }]} numberOfLines={1}>
+                    {ev?.title}
+                  </Text>
+                  <Text style={[styles.eventMeta, { color: c.textMuted }]} numberOfLines={1}>
+                    {formatMeta(ev?.date, ev?.venue)}
+                  </Text>
+                </View>
+
+                {/* Trailing: pay + status */}
+                <View style={styles.trailing}>
+                  <Text style={[styles.payAmount, { color: c.text }]}>
+                    ₪{(item.pay_amount || 0).toFixed(0)}
+                  </Text>
+                  {!done && days >= 0 && (
+                    <DaysChip days={days} c={c} />
+                  )}
+                  {done && (
+                    <View style={[styles.doneChip, { backgroundColor: c.greenSoft }]}>
+                      <Text style={[styles.doneChipText, { color: c.green }]}>
+                        {item.is_paid ? 'שולם' : 'הסתיים'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
       )}
     </ScreenWrapper>
   );
 }
 
+function DaysChip({ days, c }) {
+  if (days === 0) {
+    return (
+      <View style={[styles.chipBase, { backgroundColor: c.red }]}>
+        <Text style={styles.chipText}>היום!</Text>
+      </View>
+    );
+  }
+  if (days <= 7) {
+    return (
+      <View style={[styles.chipBase, { backgroundColor: c.statPeachBg }]}>
+        <Text style={[styles.chipText, { color: c.statPeachFg }]}>
+          {days === 1 ? 'מחר' : `${days} ימים`}
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.chipBase, { backgroundColor: c.primarySoft }]}>
+      <Text style={[styles.chipText, { color: c.accentGlyph }]}>{days} ימים</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 16,
-    marginBottom: 16,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 22, marginTop: 16, marginBottom: 12,
   },
-  pageTitle: {
-    fontSize: 26, fontWeight: '700', color: '#1a1a2e',
-    textAlign: rtl ? 'right' : 'left',
+  pageTitle: { fontSize: 25, fontWeight: '800', textAlign: rtl ? 'right' : 'left' },
+
+  filters: {
+    flexDirection: 'row', paddingHorizontal: 22, marginBottom: 14, gap: 8,
   },
+  filterBtn: {
+    paddingHorizontal: 16, minHeight: 36,
+    justifyContent: 'center', borderRadius: 10, borderWidth: 1,
+  },
+  filterText: { fontSize: 13, fontWeight: '600' },
+
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  emptySubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 8, textAlign: 'center' },
+  emptyText: { fontSize: 18, fontWeight: '600', textAlign: 'center' },
+  emptySubtext: { fontSize: 14, marginTop: 8, textAlign: 'center' },
 
   card: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginBottom: 12,
-    overflow: 'hidden',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 16, borderWidth: 1,
+    marginHorizontal: 22, marginBottom: 13, padding: 15, gap: 14,
   },
-  cardAccent: { width: 6, backgroundColor: '#27ae60' },
-  cardBody: { flex: 1, padding: 16 },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  eventTitle: {
-    fontSize: 17, fontWeight: '700', color: '#1a1a2e',
-    flex: 1, marginEnd: 8, textAlign: rtl ? 'right' : 'left',
+  dateChip: {
+    width: 54, borderRadius: 12, paddingVertical: 9, alignItems: 'center',
   },
-  eventDate: { fontSize: 14, color: '#6B7280', marginBottom: 4, textAlign: rtl ? 'right' : 'left' },
-  eventVenue: { fontSize: 14, color: '#9CA3AF', marginBottom: 8, textAlign: rtl ? 'right' : 'left' },
-  payRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  payLabel: { fontSize: 14, color: '#9CA3AF', fontWeight: '600' },
-  payAmount: { fontSize: 16, fontWeight: '700', color: '#1a1a2e', marginEnd: 10 },
-  paidBadge: { fontSize: 13, fontWeight: '600' },
-  paid: { color: '#10B981' },
-  unpaid: { color: '#e74c3c' },
-
-  chipToday: {
-    fontSize: 12, fontWeight: '700', color: '#fff',
-    backgroundColor: '#e74c3c', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
+  dateChipDd: { fontSize: 20, fontWeight: '800' },
+  dateChipMm: { fontSize: 10, fontWeight: '700' },
+  cardBody: { flex: 1 },
+  eventTitle: { fontSize: 16, fontWeight: '800' },
+  eventMeta: { fontSize: 12.5, fontWeight: '500', marginTop: 3 },
+  trailing: { alignItems: 'flex-end', gap: 7 },
+  payAmount: { fontSize: 16, fontWeight: '800' },
+  chipBase: {
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
   },
-  chipSoon: {
-    fontSize: 12, fontWeight: '700', color: '#fff',
-    backgroundColor: '#f39c12', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
-  },
-  chipFuture: {
-    fontSize: 12, fontWeight: '600', color: '#5B6EF5',
-    backgroundColor: '#EEF2FF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
-  },
+  chipText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  doneChip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  doneChipText: { fontSize: 11, fontWeight: '700' },
 });
